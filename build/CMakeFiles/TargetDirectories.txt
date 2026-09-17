@@ -1,5 +1,0 @@
-/Users/matheusbrito/tuf/ipusb/build/CMakeFiles/usb_server.dir
-/Users/matheusbrito/tuf/ipusb/build/CMakeFiles/usb_client.dir
-/Users/matheusbrito/tuf/ipusb/build/CMakeFiles/usb_control.dir
-/Users/matheusbrito/tuf/ipusb/build/CMakeFiles/edit_cache.dir
-/Users/matheusbrito/tuf/ipusb/build/CMakeFiles/rebuild_cache.dir
