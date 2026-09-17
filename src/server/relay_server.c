@@ -5,6 +5,7 @@
 
 #ifdef _WIN32
     #include <windows.h>
+    #define strcasecmp _stricmp
     typedef HANDLE thread_t;
     typedef CRITICAL_SECTION mutex_t;
     #define MUTEX_INIT(m) InitializeCriticalSection(m)
