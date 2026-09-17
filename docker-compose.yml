@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  usb_server:
+    build: .
+    container_name: usbipserv_relay
+    restart: always
+    ports:
+      - "32400:32400"
+    environment:
+      - VPS_SERVER_IP=209.126.81.68
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

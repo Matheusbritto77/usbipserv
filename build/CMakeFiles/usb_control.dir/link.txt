@@ -1,0 +1,1 @@
+/usr/bin/cc  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/usb_control.dir/src/control/control_main.c.o CMakeFiles/usb_control.dir/src/control/control_panel.c.o CMakeFiles/usb_control.dir/src/shared/usb_device.c.o CMakeFiles/usb_control.dir/src/shared/usbredir_protocol.c.o CMakeFiles/usb_control.dir/src/shared/network_socket.c.o -o usb_control

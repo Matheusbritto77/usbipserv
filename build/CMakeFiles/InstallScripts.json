@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/matheusbrito/tuf/ipusb/build/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

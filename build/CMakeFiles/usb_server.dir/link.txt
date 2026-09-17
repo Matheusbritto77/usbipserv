@@ -1,0 +1,1 @@
+/usr/bin/cc  -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/usb_server.dir/src/server/server_main.c.o CMakeFiles/usb_server.dir/src/server/relay_server.c.o CMakeFiles/usb_server.dir/src/shared/usb_device.c.o CMakeFiles/usb_server.dir/src/shared/usbredir_protocol.c.o CMakeFiles/usb_server.dir/src/shared/network_socket.c.o -o usb_server
