@@ -88,10 +88,10 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         g_hwndMain = hwnd;
         refresh_usb_hardware();
 
-        // --- SCREEN 1 CONTROLS (INITIAL CONNECTION DIALOG) ---
+        // Enforce Numeric-Only Input (ES_NUMBER)
         g_hwndEditTech = CreateWindowEx(
             WS_EX_CLIENTEDGE, "EDIT", "",
-            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL | ES_NUMBER,
             160, 180, 260, 28,
             hwnd, (HMENU)IDC_EDIT_TECH_ID, GetModuleHandle(NULL), NULL
         );
@@ -103,7 +103,6 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             hwnd, (HMENU)IDC_BTN_CONNECT_TECH, GetModuleHandle(NULL), NULL
         );
 
-        // --- SCREEN 2 CONTROLS (WIZARD STEPS) - HIDDEN INITIALLY ---
         g_hwndProgress = CreateWindowEx(
             0, PROGRESS_CLASS, NULL,
             WS_CHILD | PBS_SMOOTH,
@@ -127,11 +126,10 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         if (LOWORD(wParam) == IDC_BTN_CONNECT_TECH) {
             GetWindowText(g_hwndEditTech, g_entered_tech_id, sizeof(g_entered_tech_id));
             if (strlen(g_entered_tech_id) == 0) {
-                MessageBox(hwnd, "Please enter the Technician ID or Server Address provided by your support technician.", "USB Redirector Client", MB_OK | MB_ICONWARNING);
+                MessageBox(hwnd, "Please enter the numeric Technician ID (e.g. 7891) provided by your support technician.", "USB Redirector Client", MB_OK | MB_ICONWARNING);
                 return 0;
             }
 
-            // Switch UI State: Screen 1 -> Screen 2 (Wizard Steps)
             g_gui_state = GUI_STATE_WIZARD_STEPS;
             g_current_step = 1;
 
@@ -143,7 +141,6 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
             InvalidateRect(hwnd, NULL, TRUE);
 
-            // Connect to server in background thread
             _beginthreadex(NULL, 0, client_network_thread, NULL, 0, NULL);
         } else if (LOWORD(wParam) == IDC_BTN_CANCEL || LOWORD(wParam) == IDCANCEL || LOWORD(wParam) == IDOK) {
             if (g_client_sock != INVALID_SOCKET) {
@@ -218,7 +215,6 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         HFONT hOldFont = (HFONT)SelectObject(hdc, hFontTitle);
 
         if (g_gui_state == GUI_STATE_CONNECT_DIALOG) {
-            // --- SCREEN 1: CONNECTION DIALOG ---
             SetTextColor(hdc, RGB(30, 30, 30));
             TextOut(hdc, 24, 14, "USB Redirector Client", 21);
 
@@ -234,14 +230,14 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                                           CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
             SelectObject(hdc, hFontLabel);
             SetTextColor(hdc, RGB(40, 40, 40));
-            TextOut(hdc, 50, 120, "Enter Technician ID or Callback Server Code:", 44);
+            TextOut(hdc, 50, 120, "Enter Numeric Technician ID:", 28);
 
             HFONT hFontHint = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                          DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                          CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
             SelectObject(hdc, hFontHint);
             SetTextColor(hdc, RGB(120, 120, 120));
-            TextOut(hdc, 50, 148, "Please type the Technician ID (e.g. TECH-7891) provided by your technician.", 76);
+            TextOut(hdc, 50, 148, "Please type the numeric Technician ID (e.g. 7891) provided by your technician.", 78);
 
             TextOut(hdc, 50, 184, "Technician ID:", 14);
 
@@ -249,7 +245,6 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             DeleteObject(hFontLabel);
             DeleteObject(hFontHint);
         } else {
-            // --- SCREEN 2: 4-STEP WIZARD (FOTO 1) ---
             SetTextColor(hdc, RGB(30, 30, 30));
             TextOut(hdc, 24, 14, "Ready to Service Your Device", 28);
 
@@ -308,7 +303,7 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             SelectObject(hdc, hFontDetail);
             SetTextColor(hdc, RGB(100, 100, 100));
             char techStatusStr[256];
-            snprintf(techStatusStr, sizeof(techStatusStr), "Connected to Technician [%s]. Waiting for technician to accept...", g_entered_tech_id);
+            snprintf(techStatusStr, sizeof(techStatusStr), "Connected to Technician ID [%s]. Waiting for technician to accept...", g_entered_tech_id);
             TextOut(hdc, 70, y_positions[1] + 28, techStatusStr, (int)strlen(techStatusStr));
 
             // STEP 3

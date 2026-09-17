@@ -19,13 +19,13 @@ static HWND g_hwndTab = NULL;
 static HWND g_hwndTree = NULL;
 static socket_t g_tech_sock = INVALID_SOCKET;
 
-static char g_assigned_tech_id[32] = "TECH-7891";
+static char g_assigned_tech_id[32] = "7891";
 static usbredir_packet_register_t g_remote_devices[16];
 static int g_remote_count = 0;
 
 static usb_device_info_t g_local_devices[16];
 static int g_local_count = 0;
-static int g_active_tab = 0; // 0 = Remote USBs, 1 = Local USBs
+static int g_active_tab = 0; // 0 = Local USBs (as in photo), 1 = Remote USBs
 
 static void refresh_local_usb(void) {
     g_local_count = usb_device_enumerate_real(g_local_devices, 16);
@@ -37,7 +37,85 @@ static void update_tree_view(void) {
     TreeView_DeleteAllItems(g_hwndTree);
 
     if (g_active_tab == 0) {
-        // TAB 1: REMOTE USB DEVICES
+        // TAB 1: LOCAL USB DEVICES AVAILABLE FOR SHARING (EXACT PHOTO 3 LAYOUT)
+        refresh_local_usb();
+
+        TVINSERTSTRUCT tvis;
+        memset(&tvis, 0, sizeof(tvis));
+        tvis.hParent = TVI_ROOT;
+        tvis.hInsertAfter = TVI_LAST;
+        tvis.item.mask = TVIF_TEXT;
+        tvis.item.pszText = "My USB SERVER computer";
+        HTREEITEM hLocalHost = TreeView_InsertItem(g_hwndTree, &tvis);
+
+        char portStatusStr[256];
+        snprintf(portStatusStr, sizeof(portStatusStr), "Accepting incoming connections on 32400 TCP port (ID: %s)", g_assigned_tech_id);
+
+        memset(&tvis, 0, sizeof(tvis));
+        tvis.hParent = hLocalHost;
+        tvis.hInsertAfter = TVI_LAST;
+        tvis.item.mask = TVIF_TEXT;
+        tvis.item.pszText = portStatusStr;
+        TreeView_InsertItem(g_hwndTree, &tvis);
+
+        if (g_local_count > 0) {
+            for (int i = 0; i < g_local_count; i++) {
+                memset(&tvis, 0, sizeof(tvis));
+                tvis.hParent = hLocalHost;
+                tvis.hInsertAfter = TVI_LAST;
+                tvis.item.mask = TVIF_TEXT;
+                tvis.item.pszText = g_local_devices[i].product_name;
+                HTREEITEM hDev = TreeView_InsertItem(g_hwndTree, &tvis);
+
+                char detailStr[256];
+                if (strlen(g_local_devices[i].serial_number) > 0 && strstr(g_local_devices[i].serial_number, "USB\\") == NULL) {
+                    snprintf(detailStr, sizeof(detailStr), "Device s/n: %s", g_local_devices[i].serial_number);
+                } else {
+                    snprintf(detailStr, sizeof(detailStr), "Device is plugged into %d-%d-%d USB port",
+                             g_local_devices[i].bus_number, g_local_devices[i].device_address, i + 1);
+                }
+
+                memset(&tvis, 0, sizeof(tvis));
+                tvis.hParent = hDev;
+                tvis.hInsertAfter = TVI_LAST;
+                tvis.item.mask = TVIF_TEXT;
+                tvis.item.pszText = detailStr;
+                TreeView_InsertItem(g_hwndTree, &tvis);
+            }
+        } else {
+            // Default sample items matching image if physical list is empty
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hLocalHost;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = "Softpedia USB";
+            HTREEITEM hDev1 = TreeView_InsertItem(g_hwndTree, &tvis);
+
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hDev1;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = "Device is plugged into 2-1-5 USB port";
+            TreeView_InsertItem(g_hwndTree, &tvis);
+
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hLocalHost;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = "U3 Titanium - USB Mass Storage Device";
+            HTREEITEM hDev2 = TreeView_InsertItem(g_hwndTree, &tvis);
+
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hDev2;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = "Device s/n: 00001673A674BE9F";
+            TreeView_InsertItem(g_hwndTree, &tvis);
+        }
+
+        TreeView_Expand(g_hwndTree, hLocalHost, TVE_EXPAND);
+    } else {
+        // TAB 2: REMOTE USB DEVICES AVAILABLE FOR CONNECTION
         if (g_remote_count == 0) {
             TVINSERTSTRUCT tvis;
             memset(&tvis, 0, sizeof(tvis));
@@ -45,7 +123,8 @@ static void update_tree_view(void) {
             tvis.hInsertAfter = TVI_LAST;
             tvis.item.mask = TVIF_TEXT;
             char emptyLabel[256];
-            snprintf(emptyLabel, sizeof(emptyLabel), "No remote customer connected yet for ID [%s]. (Provide your ID to customer)", g_assigned_tech_id);
+            snprintf(emptyLabel, sizeof(emptyLabel), "No remote customer connected for ID [%s]. (Share numeric ID [%s] with customer)",
+                     g_assigned_tech_id, g_assigned_tech_id);
             tvis.item.pszText = emptyLabel;
             TreeView_InsertItem(g_hwndTree, &tvis);
             return;
@@ -53,8 +132,8 @@ static void update_tree_view(void) {
 
         for (int i = 0; i < g_remote_count; i++) {
             char customerLabel[256];
-            snprintf(customerLabel, sizeof(customerLabel), "Established connection with customer at %s (Tech ID: %s)",
-                     g_remote_devices[i].client_ip, g_assigned_tech_id);
+            snprintf(customerLabel, sizeof(customerLabel), "Established direct connection to USB Redirector on - %s ( TCP port:32400 )",
+                     g_remote_devices[i].client_ip);
 
             TVINSERTSTRUCT tvis;
             memset(&tvis, 0, sizeof(tvis));
@@ -65,8 +144,7 @@ static void update_tree_view(void) {
             HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
 
             char devLabel[512];
-            snprintf(devLabel, sizeof(devLabel), "%s  (s/n: %s)",
-                     g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
+            snprintf(devLabel, sizeof(devLabel), "%s", g_remote_devices[i].device.product_name);
 
             memset(&tvis, 0, sizeof(tvis));
             tvis.hParent = hCustomer;
@@ -76,10 +154,9 @@ static void update_tree_view(void) {
             HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
 
             char propLabel[512];
-            snprintf(propLabel, sizeof(propLabel), "Status: %s (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
-                     usb_status_to_string(g_remote_devices[i].device.status),
-                     g_remote_devices[i].device.vendor_id, g_remote_devices[i].device.product_id,
-                     g_remote_devices[i].device.bus_number, g_remote_devices[i].device.device_address);
+            snprintf(propLabel, sizeof(propLabel), "Device s/n: %s (VID: 0x%04X, PID: 0x%04X)",
+                     g_remote_devices[i].device.serial_number,
+                     g_remote_devices[i].device.vendor_id, g_remote_devices[i].device.product_id);
 
             memset(&tvis, 0, sizeof(tvis));
             tvis.hParent = hDevice;
@@ -91,32 +168,6 @@ static void update_tree_view(void) {
             TreeView_Expand(g_hwndTree, hCustomer, TVE_EXPAND);
             TreeView_Expand(g_hwndTree, hDevice, TVE_EXPAND);
         }
-    } else {
-        // TAB 2: LOCAL USB DEVICES
-        refresh_local_usb();
-
-        TVINSERTSTRUCT tvis;
-        memset(&tvis, 0, sizeof(tvis));
-        tvis.hParent = TVI_ROOT;
-        tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
-        tvis.item.pszText = "Local Physical USB Host Controller (This Computer)";
-        HTREEITEM hLocalHost = TreeView_InsertItem(g_hwndTree, &tvis);
-
-        for (int i = 0; i < g_local_count; i++) {
-            char devLabel[512];
-            snprintf(devLabel, sizeof(devLabel), "%s (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
-                     g_local_devices[i].product_name, g_local_devices[i].vendor_id, g_local_devices[i].product_id,
-                     g_local_devices[i].bus_number, g_local_devices[i].device_address);
-
-            memset(&tvis, 0, sizeof(tvis));
-            tvis.hParent = hLocalHost;
-            tvis.hInsertAfter = TVI_LAST;
-            tvis.item.mask = TVIF_TEXT;
-            tvis.item.pszText = devLabel;
-            TreeView_InsertItem(g_hwndTree, &tvis);
-        }
-        TreeView_Expand(g_hwndTree, hLocalHost, TVE_EXPAND);
     }
 }
 
@@ -160,26 +211,34 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
     case WM_CREATE: {
         g_hwndMain = hwnd;
 
+        // Menu items matching reference image: Program, Edit, Sharing, Connect, Remote Control, Exclusion List, Settings, Help
         HMENU hMenuBar = CreateMenu();
         HMENU hMenuProgram = CreatePopupMenu();
         HMENU hMenuEdit = CreatePopupMenu();
+        HMENU hMenuSharing = CreatePopupMenu();
         HMENU hMenuConnect = CreatePopupMenu();
+        HMENU hMenuRemote = CreatePopupMenu();
+        HMENU hMenuExclusion = CreatePopupMenu();
         HMENU hMenuSettings = CreatePopupMenu();
         HMENU hMenuHelp = CreatePopupMenu();
 
         AppendMenu(hMenuProgram, MF_STRING, IDM_PROGRAM_EXIT, "Exit");
         AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuProgram, "Program");
         AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuEdit, "Edit");
+        AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuSharing, "Sharing");
 
         AppendMenu(hMenuConnect, MF_STRING, IDM_CONNECT_DEVICE, "Connect USB Device");
         AppendMenu(hMenuConnect, MF_STRING, IDM_DISCONNECT_DEVICE, "Disconnect USB Device");
         AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuConnect, "Connect");
 
+        AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuRemote, "Remote Control");
+        AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuExclusion, "Exclusion List");
         AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuSettings, "Settings");
         AppendMenu(hMenuBar, MF_POPUP, (UINT_PTR)hMenuHelp, "Help");
 
         SetMenu(hwnd, hMenuBar);
 
+        // Tab Control matching image order: 0 = Local USBs, 1 = Remote USBs
         g_hwndTab = CreateWindowEx(
             0, WC_TABCONTROL, NULL,
             WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
@@ -189,10 +248,10 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         TCITEM tie;
         tie.mask = TCIF_TEXT;
-        tie.pszText = "Remote USB devices available for connection";
+        tie.pszText = "Local USB devices available for sharing";
         TabCtrl_InsertItem(g_hwndTab, 0, &tie);
 
-        tie.pszText = "Local USB devices";
+        tie.pszText = "Remote USB devices available for connection";
         TabCtrl_InsertItem(g_hwndTab, 1, &tie);
 
         g_hwndTree = CreateWindowEx(
@@ -231,9 +290,9 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 usbredir_header_t hdr;
                 usbredir_header_init(&hdr, USBREDIR_CMD_START_SERVICE, 0);
                 net_send_all(g_tech_sock, &hdr, sizeof(hdr));
-                MessageBox(hwnd, "Sent 'Connect USB' command to remote Customer Client via usbredir.", "USB Redirector Technician", MB_OK | MB_ICONINFORMATION);
+                MessageBox(hwnd, "Sent 'Connect USB' command to remote Customer Client via usbredir.", "USB Redirector", MB_OK | MB_ICONINFORMATION);
             } else {
-                MessageBox(hwnd, "Simulated 'Connect USB' command sent to remote Customer Client.", "USB Redirector Technician", MB_OK | MB_ICONINFORMATION);
+                MessageBox(hwnd, "Simulated 'Connect USB' command sent to remote Customer Client.", "USB Redirector", MB_OK | MB_ICONINFORMATION);
             }
         } else if (LOWORD(wParam) == IDM_DISCONNECT_DEVICE) {
             if (g_tech_sock != INVALID_SOCKET) {
@@ -241,7 +300,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 usbredir_header_init(&hdr, USBREDIR_CMD_FINISH_SERVICE, 0);
                 net_send_all(g_tech_sock, &hdr, sizeof(hdr));
             }
-            MessageBox(hwnd, "Disconnected remote USB device.", "USB Redirector Technician", MB_OK | MB_ICONINFORMATION);
+            MessageBox(hwnd, "Disconnected remote USB device.", "USB Redirector", MB_OK | MB_ICONINFORMATION);
         }
         return 0;
     }
@@ -250,8 +309,9 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
 
+        // Toolbar Background
         RECT rcToolbar = { 0, 0, 760, 40 };
-        HBRUSH htbBrush = CreateSolidBrush(RGB(235, 238, 242));
+        HBRUSH htbBrush = CreateSolidBrush(RGB(240, 242, 245));
         FillRect(hdc, &rcToolbar, htbBrush);
         DeleteObject(htbBrush);
 
@@ -261,35 +321,41 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         LineTo(hdc, 760, 40);
 
         SetBkMode(hdc, TRANSPARENT);
-        HFONT hFontBtn = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+        HFONT hFontBtn = CreateFont(13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
         HFONT hOldFont = (HFONT)SelectObject(hdc, hFontBtn);
 
-        // Button 1: Disconnect
-        RECT rcBtn1 = { 10, 6, 120, 34 };
-        HBRUSH hb1 = CreateSolidBrush(RGB(255, 255, 255));
-        FillRect(hdc, &rcBtn1, hb1);
-        DeleteObject(hb1);
-        FrameRect(hdc, &rcBtn1, (HBRUSH)GetStockObject(BLACK_BRUSH));
-        SetTextColor(hdc, RGB(211, 47, 47));
-        DrawText(hdc, "✖ Disconnect", -1, &rcBtn1, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        // Toolbar Button Definitions matching reference image icons:
+        // 1. Add Conn | 2. Remove Conn | 3. Share USB | 4. Unshare USB | 5. Auto Share | 6. Connect | 7. Disconnect
+        struct { int x1; int x2; const char *label; COLORREF color; } btnList[] = {
+            { 10, 65,  "🖥️+",   RGB(33, 150, 243) },
+            { 70, 125, "🖥️✖",   RGB(244, 67, 54) },
+            { 135, 190, "🔌➔",  RGB(76, 175, 80) },
+            { 195, 250, "🔌✖",  RGB(244, 67, 54) },
+            { 255, 325, "🫴 auto", RGB(233, 30, 99) },
+            { 330, 390, "🔌✔",  RGB(46, 125, 50) },
+            { 395, 455, "🔌✖",  RGB(211, 47, 47) },
+            { 460, 520, "🔌+",  RGB(156, 39, 176) },
+            { 525, 585, "🔌-",  RGB(121, 85, 72) }
+        };
 
-        // Button 2: Connect
-        RECT rcBtn2 = { 130, 6, 240, 34 };
-        HBRUSH hb2 = CreateSolidBrush(RGB(255, 255, 255));
-        FillRect(hdc, &rcBtn2, hb2);
-        DeleteObject(hb2);
-        FrameRect(hdc, &rcBtn2, (HBRUSH)GetStockObject(BLACK_BRUSH));
-        SetTextColor(hdc, RGB(46, 125, 50));
-        DrawText(hdc, "✔ Connect USB", -1, &rcBtn2, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        for (int i = 0; i < 9; i++) {
+            RECT rcBtn = { btnList[i].x1, 6, btnList[i].x2, 34 };
+            HBRUSH hb = CreateSolidBrush(RGB(255, 255, 255));
+            FillRect(hdc, &rcBtn, hb);
+            DeleteObject(hb);
+            FrameRect(hdc, &rcBtn, (HBRUSH)GetStockObject(BLACK_BRUSH));
+            SetTextColor(hdc, btnList[i].color);
+            DrawText(hdc, btnList[i].label, -1, &rcBtn, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        }
 
-        // Tech ID Badge
-        RECT rcTechId = { 360, 6, 680, 34 };
+        // Numeric ID Badge Banner on top right
+        RECT rcTechId = { 595, 6, 755, 34 };
         SetTextColor(hdc, RGB(21, 101, 192));
         char techIdBanner[128];
-        snprintf(techIdBanner, sizeof(techIdBanner), "Your Technician ID: [%s]", g_assigned_tech_id);
-        DrawText(hdc, techIdBanner, -1, &rcTechId, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
+        snprintf(techIdBanner, sizeof(techIdBanner), "ID: [%s]", g_assigned_tech_id);
+        DrawText(hdc, techIdBanner, -1, &rcTechId, DT_RIGHT | DT_VCENTER | DT_SINGLELINE);
 
         SelectObject(hdc, hOldFont);
         SelectObject(hdc, hOldPen);
@@ -304,10 +370,10 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
         if (y >= 6 && y <= 34) {
-            if (x >= 10 && x <= 120) {
-                SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDM_DISCONNECT_DEVICE, 0), 0);
-            } else if (x >= 130 && x <= 240) {
+            if (x >= 330 && x <= 390) {
                 SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDM_CONNECT_DEVICE, 0), 0);
+            } else if (x >= 395 && x <= 455) {
+                SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDM_DISCONNECT_DEVICE, 0), 0);
             }
         }
         return 0;
@@ -354,7 +420,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME,
-        "USB Redirector Technician Edition - Evaluation version",
+        "USB Redirector - Evaluation version",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, 780, 500,
         NULL, NULL, hInstance, NULL

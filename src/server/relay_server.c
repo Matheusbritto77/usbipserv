@@ -96,19 +96,18 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
             g_clients[session_idx].device = reg_pkt.device;
             g_clients[session_idx].is_active = true;
 
-            printf("[Server] Registered Customer Client at %s -> Target Tech ID: [%s]\n",
+            printf("[Server] Registered Customer Client at %s -> Target Numeric Tech ID: [%s]\n",
                    conn_ip, reg_pkt.target_tech_id);
             printf("[Server] USB Device: %s (s/n: %s)\n",
                    reg_pkt.device.product_name, reg_pkt.device.serial_number);
 
-            // Forward client registration to matching active technician
             for (int t = 0; t < MAX_SESSIONS; t++) {
                 if (g_techs[t].is_active && strcasecmp(g_techs[t].tech_id, reg_pkt.target_tech_id) == 0) {
                     usbredir_header_t resp_hdr;
                     usbredir_header_init(&resp_hdr, USBREDIR_CMD_LIST_DEVICES, sizeof(usbredir_packet_register_t));
                     net_send_all(g_techs[t].tech_sock, &resp_hdr, sizeof(resp_hdr));
                     net_send_all(g_techs[t].tech_sock, &reg_pkt, sizeof(reg_pkt));
-                    printf("[Server] Routed USB device to Technician %s\n", g_techs[t].tech_id);
+                    printf("[Server] Routed USB device to Numeric Technician ID %s\n", g_techs[t].tech_id);
                 }
             }
         }
@@ -125,12 +124,12 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
 
         if (tech_idx >= 0) {
             g_techs[tech_idx].tech_sock = conn_sock;
-            snprintf(g_techs[tech_idx].tech_id, sizeof(g_techs[tech_idx].tech_id), "TECH-%d", ++g_tech_counter);
+            // FORCED PURE NUMERIC TECHNICIAN ID (e.g. 7891, 7892)
+            snprintf(g_techs[tech_idx].tech_id, sizeof(g_techs[tech_idx].tech_id), "%d", ++g_tech_counter);
             g_techs[tech_idx].is_active = true;
 
-            printf("[Server] Registered Technician Control Panel. Assigned ID: [%s]\n", g_techs[tech_idx].tech_id);
+            printf("[Server] Registered Technician Control Panel. Forced Numeric ID: [%s]\n", g_techs[tech_idx].tech_id);
 
-            // Send assigned Technician ID back to Technician GUI
             usbredir_header_t init_hdr;
             usbredir_header_init(&init_hdr, USBREDIR_CMD_REGISTER_TECH, sizeof(usbredir_packet_tech_init_t));
             usbredir_packet_tech_init_t init_pkt;
@@ -139,7 +138,6 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
             net_send_all(conn_sock, &init_hdr, sizeof(init_hdr));
             net_send_all(conn_sock, &init_pkt, sizeof(init_pkt));
 
-            // Forward any existing clients mapped to this tech
             for (int c = 0; c < MAX_SESSIONS; c++) {
                 if (g_clients[c].is_active && strcasecmp(g_clients[c].target_tech_id, g_techs[tech_idx].tech_id) == 0) {
                     usbredir_header_t list_hdr;
@@ -156,7 +154,6 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
         }
         MUTEX_UNLOCK(&g_session_lock);
     } else if (hdr.cmd == USBREDIR_CMD_START_SERVICE || hdr.cmd == USBREDIR_CMD_FINISH_SERVICE) {
-        // Forward start/finish service command to client
         MUTEX_LOCK(&g_session_lock);
         for (int c = 0; c < MAX_SESSIONS; c++) {
             if (g_clients[c].is_active) {
@@ -182,7 +179,7 @@ void relay_server_start(int port) {
 
     printf("=====================================================\n");
     printf("   USB REDIRECTOR MITM RELAY SERVER (usbredir Core)  \n");
-    printf("   Target Technician ID Session Router Active        \n");
+    printf("   Forced Pure Numeric Technician ID Router Active   \n");
     printf("=====================================================\n");
     printf("[Server] Listening on 0.0.0.0:%d...\n", port);
 
