@@ -12,21 +12,29 @@
 
 #define TIMER_ID_PROGRESS 101
 #define WM_USER_SERVER_CMD (WM_USER + 100)
+
 #define IDC_EDIT_TECH_ID 301
 #define IDC_BTN_CONNECT_TECH 302
+#define IDC_BTN_CANCEL 303
+
+typedef enum {
+    GUI_STATE_CONNECT_DIALOG = 0,
+    GUI_STATE_WIZARD_STEPS   = 1
+} gui_state_t;
 
 static HWND g_hwndMain = NULL;
+static HWND g_hwndEditTech = NULL;
+static HWND g_hwndBtnConnect = NULL;
 static HWND g_hwndProgress = NULL;
 static HWND g_hwndButton = NULL;
-static HWND g_hwndEditTech = NULL;
-static HWND g_hwndBtnConnectTech = NULL;
 
+static gui_state_t g_gui_state = GUI_STATE_CONNECT_DIALOG;
 static int g_current_step = 1;
 static int g_progress_val = 0;
 static usb_device_info_t g_devices[MAX_USB_DEVICES];
 static int g_num_devices = 0;
 static socket_t g_client_sock = INVALID_SOCKET;
-static char g_entered_tech_id[32] = "TECH-7891";
+static char g_entered_tech_id[32] = "";
 
 static void refresh_usb_hardware(void) {
     g_num_devices = usb_device_enumerate_real(g_devices, MAX_USB_DEVICES);
@@ -68,7 +76,7 @@ static unsigned __stdcall client_network_thread(void *arg) {
             }
         }
     } else {
-        Sleep(1500);
+        Sleep(1000);
         PostMessage(g_hwndMain, WM_USER_SERVER_CMD, 2, 0);
     }
     return 0;
@@ -80,37 +88,36 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         g_hwndMain = hwnd;
         refresh_usb_hardware();
 
-        // Technician ID Entry Controls
+        // --- SCREEN 1 CONTROLS (INITIAL CONNECTION DIALOG) ---
         g_hwndEditTech = CreateWindowEx(
-            WS_EX_CLIENTEDGE, "EDIT", "TECH-7891",
+            WS_EX_CLIENTEDGE, "EDIT", "",
             WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
-            240, 195, 120, 24,
+            160, 180, 260, 28,
             hwnd, (HMENU)IDC_EDIT_TECH_ID, GetModuleHandle(NULL), NULL
         );
 
-        g_hwndBtnConnectTech = CreateWindowEx(
-            0, "BUTTON", "Connect to Tech",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
-            370, 195, 130, 24,
+        g_hwndBtnConnect = CreateWindowEx(
+            0, "BUTTON", "Connect",
+            WS_CHILD | WS_VISIBLE | BS_DEFPUSHBUTTON,
+            430, 180, 100, 28,
             hwnd, (HMENU)IDC_BTN_CONNECT_TECH, GetModuleHandle(NULL), NULL
         );
 
-        // Progress Bar
+        // --- SCREEN 2 CONTROLS (WIZARD STEPS) - HIDDEN INITIALLY ---
         g_hwndProgress = CreateWindowEx(
             0, PROGRESS_CLASS, NULL,
-            WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
-            240, 260, 260, 20,
+            WS_CHILD | PBS_SMOOTH,
+            240, 260, 280, 20,
             hwnd, (HMENU)201, GetModuleHandle(NULL), NULL
         );
         SendMessage(g_hwndProgress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
         SendMessage(g_hwndProgress, PBM_SETPOS, 0, 0);
 
-        // Bottom Cancel / Finish Button
         g_hwndButton = CreateWindowEx(
             0, "BUTTON", "Cancel",
-            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            WS_CHILD | BS_PUSHBUTTON,
             460, 370, 100, 32,
-            hwnd, (HMENU)IDCANCEL, GetModuleHandle(NULL), NULL
+            hwnd, (HMENU)IDC_BTN_CANCEL, GetModuleHandle(NULL), NULL
         );
 
         return 0;
@@ -119,8 +126,26 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
     case WM_COMMAND: {
         if (LOWORD(wParam) == IDC_BTN_CONNECT_TECH) {
             GetWindowText(g_hwndEditTech, g_entered_tech_id, sizeof(g_entered_tech_id));
+            if (strlen(g_entered_tech_id) == 0) {
+                MessageBox(hwnd, "Please enter the Technician ID or Server Address provided by your support technician.", "USB Redirector Client", MB_OK | MB_ICONWARNING);
+                return 0;
+            }
+
+            // Switch UI State: Screen 1 -> Screen 2 (Wizard Steps)
+            g_gui_state = GUI_STATE_WIZARD_STEPS;
+            g_current_step = 1;
+
+            ShowWindow(g_hwndEditTech, SW_HIDE);
+            ShowWindow(g_hwndBtnConnect, SW_HIDE);
+
+            ShowWindow(g_hwndProgress, SW_SHOW);
+            ShowWindow(g_hwndButton, SW_SHOW);
+
+            InvalidateRect(hwnd, NULL, TRUE);
+
+            // Connect to server in background thread
             _beginthreadex(NULL, 0, client_network_thread, NULL, 0, NULL);
-        } else if (LOWORD(wParam) == IDCANCEL || LOWORD(wParam) == IDOK) {
+        } else if (LOWORD(wParam) == IDC_BTN_CANCEL || LOWORD(wParam) == IDCANCEL || LOWORD(wParam) == IDOK) {
             if (g_client_sock != INVALID_SOCKET) {
                 net_close(g_client_sock);
             }
@@ -192,101 +217,138 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                                       CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
         HFONT hOldFont = (HFONT)SelectObject(hdc, hFontTitle);
 
-        SetTextColor(hdc, RGB(30, 30, 30));
-        TextOut(hdc, 24, 14, "Ready to Service Your Device", 28);
+        if (g_gui_state == GUI_STATE_CONNECT_DIALOG) {
+            // --- SCREEN 1: CONNECTION DIALOG ---
+            SetTextColor(hdc, RGB(30, 30, 30));
+            TextOut(hdc, 24, 14, "USB Redirector Client", 21);
 
-        HFONT hFontSub = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-        SelectObject(hdc, hFontSub);
-        SetTextColor(hdc, RGB(110, 115, 125));
-        TextOut(hdc, 24, 40, "Please follow instructions below", 32);
+            HFONT hFontSub = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                         CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+            SelectObject(hdc, hFontSub);
+            SetTextColor(hdc, RGB(110, 115, 125));
+            TextOut(hdc, 24, 40, "Connect to Remote Technician Server", 35);
 
-        HFONT hFontNumActive = CreateFont(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            HFONT hFontLabel = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
                                           DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                           CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-        HFONT hFontTextActive = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+            SelectObject(hdc, hFontLabel);
+            SetTextColor(hdc, RGB(40, 40, 40));
+            TextOut(hdc, 50, 120, "Enter Technician ID or Callback Server Code:", 44);
+
+            HFONT hFontHint = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                         CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+            SelectObject(hdc, hFontHint);
+            SetTextColor(hdc, RGB(120, 120, 120));
+            TextOut(hdc, 50, 148, "Please type the Technician ID (e.g. TECH-7891) provided by your technician.", 76);
+
+            TextOut(hdc, 50, 184, "Technician ID:", 14);
+
+            DeleteObject(hFontSub);
+            DeleteObject(hFontLabel);
+            DeleteObject(hFontHint);
+        } else {
+            // --- SCREEN 2: 4-STEP WIZARD (FOTO 1) ---
+            SetTextColor(hdc, RGB(30, 30, 30));
+            TextOut(hdc, 24, 14, "Ready to Service Your Device", 28);
+
+            HFONT hFontSub = CreateFont(15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                         DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                         CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+            SelectObject(hdc, hFontSub);
+            SetTextColor(hdc, RGB(110, 115, 125));
+            TextOut(hdc, 24, 40, "Please follow instructions below", 32);
+
+            HFONT hFontNumActive = CreateFont(24, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                              DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                              CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+            HFONT hFontTextActive = CreateFont(16, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                               CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+            HFONT hFontTextInactive = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                                 CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+            HFONT hFontDetail = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                            CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-        HFONT hFontTextInactive = CreateFont(16, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                             CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-        HFONT hFontDetail = CreateFont(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                       DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                       CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
 
-        int y_positions[4] = { 90, 170, 240, 310 };
+            int y_positions[4] = { 90, 170, 240, 310 };
 
-        // STEP 1
-        SelectObject(hdc, hFontNumActive);
-        SetTextColor(hdc, (g_current_step >= 1) ? RGB(76, 175, 80) : RGB(180, 180, 180));
-        TextOut(hdc, 40, y_positions[0], "1", 1);
+            // STEP 1
+            SelectObject(hdc, hFontNumActive);
+            SetTextColor(hdc, (g_current_step >= 1) ? RGB(76, 175, 80) : RGB(180, 180, 180));
+            TextOut(hdc, 40, y_positions[0], "1", 1);
 
-        SelectObject(hdc, (g_current_step >= 1) ? hFontTextActive : hFontTextInactive);
-        SetTextColor(hdc, (g_current_step >= 1) ? RGB(30, 30, 30) : RGB(150, 150, 150));
-        TextOut(hdc, 70, y_positions[0] + 4, "Plug your USB device", 20);
+            SelectObject(hdc, (g_current_step >= 1) ? hFontTextActive : hFontTextInactive);
+            SetTextColor(hdc, (g_current_step >= 1) ? RGB(30, 30, 30) : RGB(150, 150, 150));
+            TextOut(hdc, 70, y_positions[0] + 4, "Plug your USB device", 20);
 
-        SelectObject(hdc, hFontDetail);
-        SetTextColor(hdc, RGB(100, 100, 100));
-
-        char devStr[256];
-        if (g_num_devices > 0) {
-            snprintf(devStr, sizeof(devStr), "Real USB: %s (VID: 0x%04X, PID: 0x%04X)",
-                     g_devices[0].product_name, g_devices[0].vendor_id, g_devices[0].product_id);
-        } else {
-            snprintf(devStr, sizeof(devStr), "Scanning USB ports... Please plug your device into a USB port.");
-        }
-        TextOut(hdc, 70, y_positions[0] + 28, devStr, (int)strlen(devStr));
-
-        // STEP 2
-        SelectObject(hdc, hFontNumActive);
-        SetTextColor(hdc, (g_current_step >= 2) ? RGB(76, 175, 80) : RGB(180, 180, 180));
-        TextOut(hdc, 40, y_positions[1], "2", 1);
-
-        SelectObject(hdc, (g_current_step >= 2) ? hFontTextActive : hFontTextInactive);
-        SetTextColor(hdc, (g_current_step >= 2) ? RGB(30, 30, 30) : RGB(150, 150, 150));
-        TextOut(hdc, 70, y_positions[1] + 4, "Enter Technician ID & start servicing", 37);
-
-        SelectObject(hdc, hFontDetail);
-        SetTextColor(hdc, RGB(100, 100, 100));
-        TextOut(hdc, 70, y_positions[1] + 28, "Technician ID:", 14);
-
-        // STEP 3
-        SelectObject(hdc, hFontNumActive);
-        SetTextColor(hdc, (g_current_step >= 3) ? RGB(76, 175, 80) : RGB(180, 180, 180));
-        TextOut(hdc, 40, y_positions[2], "3", 1);
-
-        SelectObject(hdc, (g_current_step >= 3) ? hFontTextActive : hFontTextInactive);
-        SetTextColor(hdc, (g_current_step >= 3) ? RGB(30, 30, 30) : RGB(150, 150, 150));
-        TextOut(hdc, 70, y_positions[2] + 4, "Servicing your device", 21);
-
-        SelectObject(hdc, hFontDetail);
-        SetTextColor(hdc, RGB(100, 100, 100));
-        TextOut(hdc, 70, y_positions[2] + 48, "Technician is servicing your device, this may take awhile. Please be patient.", 77);
-
-        // STEP 4
-        SelectObject(hdc, hFontNumActive);
-        SetTextColor(hdc, (g_current_step >= 4) ? RGB(76, 175, 80) : RGB(180, 180, 180));
-        TextOut(hdc, 40, y_positions[3], "4", 1);
-
-        SelectObject(hdc, (g_current_step >= 4) ? hFontTextActive : hFontTextInactive);
-        SetTextColor(hdc, (g_current_step >= 4) ? RGB(30, 30, 30) : RGB(150, 150, 150));
-        TextOut(hdc, 70, y_positions[3] + 4, "Servicing of your device has been finished", 42);
-
-        if (g_current_step == 4) {
             SelectObject(hdc, hFontDetail);
-            SetTextColor(hdc, RGB(211, 47, 47));
-            TextOut(hdc, 70, y_positions[3] + 28, "Please unplug the device from USB port and click Finish to close this program.", 78);
+            SetTextColor(hdc, RGB(100, 100, 100));
+
+            char devStr[256];
+            if (g_num_devices > 0) {
+                snprintf(devStr, sizeof(devStr), "Detected USB: %s (VID: 0x%04X, PID: 0x%04X)",
+                         g_devices[0].product_name, g_devices[0].vendor_id, g_devices[0].product_id);
+            } else {
+                snprintf(devStr, sizeof(devStr), "Scanning USB ports... Please plug your device into a USB port.");
+            }
+            TextOut(hdc, 70, y_positions[0] + 28, devStr, (int)strlen(devStr));
+
+            // STEP 2
+            SelectObject(hdc, hFontNumActive);
+            SetTextColor(hdc, (g_current_step >= 2) ? RGB(76, 175, 80) : RGB(180, 180, 180));
+            TextOut(hdc, 40, y_positions[1], "2", 1);
+
+            SelectObject(hdc, (g_current_step >= 2) ? hFontTextActive : hFontTextInactive);
+            SetTextColor(hdc, (g_current_step >= 2) ? RGB(30, 30, 30) : RGB(150, 150, 150));
+            TextOut(hdc, 70, y_positions[1] + 4, "Waiting for technician to start servicing your device", 53);
+
+            SelectObject(hdc, hFontDetail);
+            SetTextColor(hdc, RGB(100, 100, 100));
+            char techStatusStr[256];
+            snprintf(techStatusStr, sizeof(techStatusStr), "Connected to Technician [%s]. Waiting for technician to accept...", g_entered_tech_id);
+            TextOut(hdc, 70, y_positions[1] + 28, techStatusStr, (int)strlen(techStatusStr));
+
+            // STEP 3
+            SelectObject(hdc, hFontNumActive);
+            SetTextColor(hdc, (g_current_step >= 3) ? RGB(76, 175, 80) : RGB(180, 180, 180));
+            TextOut(hdc, 40, y_positions[2], "3", 1);
+
+            SelectObject(hdc, (g_current_step >= 3) ? hFontTextActive : hFontTextInactive);
+            SetTextColor(hdc, (g_current_step >= 3) ? RGB(30, 30, 30) : RGB(150, 150, 150));
+            TextOut(hdc, 70, y_positions[2] + 4, "Servicing your device", 21);
+
+            SelectObject(hdc, hFontDetail);
+            SetTextColor(hdc, RGB(100, 100, 100));
+            TextOut(hdc, 70, y_positions[2] + 48, "Technician is servicing your device, this may take awhile. Please be patient.", 77);
+
+            // STEP 4
+            SelectObject(hdc, hFontNumActive);
+            SetTextColor(hdc, (g_current_step >= 4) ? RGB(76, 175, 80) : RGB(180, 180, 180));
+            TextOut(hdc, 40, y_positions[3], "4", 1);
+
+            SelectObject(hdc, (g_current_step >= 4) ? hFontTextActive : hFontTextInactive);
+            SetTextColor(hdc, (g_current_step >= 4) ? RGB(30, 30, 30) : RGB(150, 150, 150));
+            TextOut(hdc, 70, y_positions[3] + 4, "Servicing of your device has been finished", 42);
+
+            if (g_current_step == 4) {
+                SelectObject(hdc, hFontDetail);
+                SetTextColor(hdc, RGB(211, 47, 47));
+                TextOut(hdc, 70, y_positions[3] + 28, "Please unplug the device from USB port and click Finish to close this program.", 78);
+            }
+
+            DeleteObject(hFontSub);
+            DeleteObject(hFontNumActive);
+            DeleteObject(hFontTextActive);
+            DeleteObject(hFontTextInactive);
+            DeleteObject(hFontDetail);
         }
 
         SelectObject(hdc, hOldFont);
         SelectObject(hdc, hOldPen);
         DeleteObject(hFontTitle);
-        DeleteObject(hFontSub);
-        DeleteObject(hFontNumActive);
-        DeleteObject(hFontTextActive);
-        DeleteObject(hFontTextInactive);
-        DeleteObject(hFontDetail);
         DeleteObject(hPenLine);
 
         EndPaint(hwnd, &ps);
@@ -319,7 +381,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     HWND hwnd = CreateWindowEx(
         0, CLASS_NAME,
-        "USB Redirector Technician Edition",
+        "USB Redirector Client",
         WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
         CW_USEDEFAULT, CW_USEDEFAULT, 600, 460,
         NULL, NULL, hInstance, NULL
