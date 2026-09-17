@@ -26,8 +26,13 @@ typedef struct {
 
 typedef struct {
     char client_ip[64];
+    char target_tech_id[32];
     usb_device_info_t device;
 } usbredir_packet_register_t;
+
+typedef struct {
+    char tech_id[32];
+} usbredir_packet_tech_init_t;
 
 typedef struct {
     uint32_t progress;

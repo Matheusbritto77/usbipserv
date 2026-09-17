@@ -19,63 +19,104 @@ static HWND g_hwndTab = NULL;
 static HWND g_hwndTree = NULL;
 static socket_t g_tech_sock = INVALID_SOCKET;
 
+static char g_assigned_tech_id[32] = "TECH-7891";
 static usbredir_packet_register_t g_remote_devices[16];
 static int g_remote_count = 0;
+
+static usb_device_info_t g_local_devices[16];
+static int g_local_count = 0;
+static int g_active_tab = 0; // 0 = Remote USBs, 1 = Local USBs
+
+static void refresh_local_usb(void) {
+    g_local_count = usb_device_enumerate_real(g_local_devices, 16);
+}
 
 static void update_tree_view(void) {
     if (!g_hwndTree) return;
 
     TreeView_DeleteAllItems(g_hwndTree);
 
-    if (g_remote_count == 0) {
+    if (g_active_tab == 0) {
+        // TAB 1: REMOTE USB DEVICES
+        if (g_remote_count == 0) {
+            TVINSERTSTRUCT tvis;
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = TVI_ROOT;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            char emptyLabel[256];
+            snprintf(emptyLabel, sizeof(emptyLabel), "No remote customer connected yet for ID [%s]. (Provide your ID to customer)", g_assigned_tech_id);
+            tvis.item.pszText = emptyLabel;
+            TreeView_InsertItem(g_hwndTree, &tvis);
+            return;
+        }
+
+        for (int i = 0; i < g_remote_count; i++) {
+            char customerLabel[256];
+            snprintf(customerLabel, sizeof(customerLabel), "Established connection with customer at %s (Tech ID: %s)",
+                     g_remote_devices[i].client_ip, g_assigned_tech_id);
+
+            TVINSERTSTRUCT tvis;
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = TVI_ROOT;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = customerLabel;
+            HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
+
+            char devLabel[512];
+            snprintf(devLabel, sizeof(devLabel), "%s  (s/n: %s)",
+                     g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
+
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hCustomer;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = devLabel;
+            HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
+
+            char propLabel[512];
+            snprintf(propLabel, sizeof(propLabel), "Status: %s (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
+                     usb_status_to_string(g_remote_devices[i].device.status),
+                     g_remote_devices[i].device.vendor_id, g_remote_devices[i].device.product_id,
+                     g_remote_devices[i].device.bus_number, g_remote_devices[i].device.device_address);
+
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hDevice;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = propLabel;
+            TreeView_InsertItem(g_hwndTree, &tvis);
+
+            TreeView_Expand(g_hwndTree, hCustomer, TVE_EXPAND);
+            TreeView_Expand(g_hwndTree, hDevice, TVE_EXPAND);
+        }
+    } else {
+        // TAB 2: LOCAL USB DEVICES
+        refresh_local_usb();
+
         TVINSERTSTRUCT tvis;
         memset(&tvis, 0, sizeof(tvis));
         tvis.hParent = TVI_ROOT;
         tvis.hInsertAfter = TVI_LAST;
         tvis.item.mask = TVIF_TEXT;
-        tvis.item.pszText = "No active remote customer USB devices connected yet. (Waiting for customer...)";
-        TreeView_InsertItem(g_hwndTree, &tvis);
-        return;
-    }
+        tvis.item.pszText = "Local Physical USB Host Controller (This Computer)";
+        HTREEITEM hLocalHost = TreeView_InsertItem(g_hwndTree, &tvis);
 
-    for (int i = 0; i < g_remote_count; i++) {
-        char customerLabel[256];
-        snprintf(customerLabel, sizeof(customerLabel), "Established connection with customer at %s", g_remote_devices[i].client_ip);
+        for (int i = 0; i < g_local_count; i++) {
+            char devLabel[512];
+            snprintf(devLabel, sizeof(devLabel), "%s (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
+                     g_local_devices[i].product_name, g_local_devices[i].vendor_id, g_local_devices[i].product_id,
+                     g_local_devices[i].bus_number, g_local_devices[i].device_address);
 
-        TVINSERTSTRUCT tvis;
-        memset(&tvis, 0, sizeof(tvis));
-        tvis.hParent = TVI_ROOT;
-        tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
-        tvis.item.pszText = customerLabel;
-        HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
-
-        char devLabel[512];
-        snprintf(devLabel, sizeof(devLabel), "%s  (s/n: %s)",
-                 g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
-
-        memset(&tvis, 0, sizeof(tvis));
-        tvis.hParent = hCustomer;
-        tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
-        tvis.item.pszText = devLabel;
-        HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
-
-        char propLabel[512];
-        snprintf(propLabel, sizeof(propLabel), "Status: %s (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
-                 usb_status_to_string(g_remote_devices[i].device.status),
-                 g_remote_devices[i].device.vendor_id, g_remote_devices[i].device.product_id,
-                 g_remote_devices[i].device.bus_number, g_remote_devices[i].device.device_address);
-
-        memset(&tvis, 0, sizeof(tvis));
-        tvis.hParent = hDevice;
-        tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
-        tvis.item.pszText = propLabel;
-        TreeView_InsertItem(g_hwndTree, &tvis);
-
-        TreeView_Expand(g_hwndTree, hCustomer, TVE_EXPAND);
-        TreeView_Expand(g_hwndTree, hDevice, TVE_EXPAND);
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hLocalHost;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT;
+            tvis.item.pszText = devLabel;
+            TreeView_InsertItem(g_hwndTree, &tvis);
+        }
+        TreeView_Expand(g_hwndTree, hLocalHost, TVE_EXPAND);
     }
 }
 
@@ -92,12 +133,20 @@ static unsigned __stdcall tech_network_thread(void *arg) {
             usbredir_header_t rx_hdr;
             if (net_recv_all(g_tech_sock, &rx_hdr, sizeof(rx_hdr)) < 0) break;
 
-            if (usbredir_header_verify(&rx_hdr) && rx_hdr.cmd == USBREDIR_CMD_LIST_DEVICES) {
-                usbredir_packet_register_t tech_pkt;
-                if (net_recv_all(g_tech_sock, &tech_pkt, sizeof(tech_pkt)) == 0) {
-                    if (g_remote_count < 16) {
-                        g_remote_devices[g_remote_count++] = tech_pkt;
+            if (usbredir_header_verify(&rx_hdr)) {
+                if (rx_hdr.cmd == USBREDIR_CMD_REGISTER_TECH) {
+                    usbredir_packet_tech_init_t init_pkt;
+                    if (net_recv_all(g_tech_sock, &init_pkt, sizeof(init_pkt)) == 0) {
+                        strncpy(g_assigned_tech_id, init_pkt.tech_id, sizeof(g_assigned_tech_id));
                         PostMessage(g_hwndMain, WM_USER_REFRESH_TREE, 0, 0);
+                    }
+                } else if (rx_hdr.cmd == USBREDIR_CMD_LIST_DEVICES) {
+                    usbredir_packet_register_t tech_pkt;
+                    if (net_recv_all(g_tech_sock, &tech_pkt, sizeof(tech_pkt)) == 0) {
+                        if (g_remote_count < 16) {
+                            g_remote_devices[g_remote_count++] = tech_pkt;
+                            PostMessage(g_hwndMain, WM_USER_REFRESH_TREE, 0, 0);
+                        }
                     }
                 }
             }
@@ -143,6 +192,9 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         tie.pszText = "Remote USB devices available for connection";
         TabCtrl_InsertItem(g_hwndTab, 0, &tie);
 
+        tie.pszText = "Local USB devices";
+        TabCtrl_InsertItem(g_hwndTab, 1, &tie);
+
         g_hwndTree = CreateWindowEx(
             WS_EX_CLIENTEDGE, WC_TREEVIEW, NULL,
             WS_CHILD | WS_VISIBLE | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS,
@@ -156,8 +208,18 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         return 0;
     }
 
+    case WM_NOTIFY: {
+        LPNMHDR pnmh = (LPNMHDR)lParam;
+        if (pnmh->idFrom == 2001 && pnmh->code == TCN_SELCHANGE) {
+            g_active_tab = TabCtrl_GetCurSel(g_hwndTab);
+            update_tree_view();
+        }
+        return 0;
+    }
+
     case WM_USER_REFRESH_TREE: {
         update_tree_view();
+        InvalidateRect(hwnd, NULL, TRUE);
         return 0;
     }
 
@@ -222,14 +284,12 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         SetTextColor(hdc, RGB(46, 125, 50));
         DrawText(hdc, "✔ Connect USB", -1, &rcBtn2, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 
-        // Button 3: Settings
-        RECT rcBtn3 = { 250, 6, 350, 34 };
-        HBRUSH hb3 = CreateSolidBrush(RGB(255, 255, 255));
-        FillRect(hdc, &rcBtn3, hb3);
-        DeleteObject(hb3);
-        FrameRect(hdc, &rcBtn3, (HBRUSH)GetStockObject(BLACK_BRUSH));
-        SetTextColor(hdc, RGB(30, 30, 30));
-        DrawText(hdc, "⚙ Settings", -1, &rcBtn3, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+        // Tech ID Badge
+        RECT rcTechId = { 360, 6, 680, 34 };
+        SetTextColor(hdc, RGB(21, 101, 192));
+        char techIdBanner[128];
+        snprintf(techIdBanner, sizeof(techIdBanner), "Your Technician ID: [%s]", g_assigned_tech_id);
+        DrawText(hdc, techIdBanner, -1, &rcTechId, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
         SelectObject(hdc, hOldFont);
         SelectObject(hdc, hOldPen);

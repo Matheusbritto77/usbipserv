@@ -12,21 +12,26 @@
 
 #define TIMER_ID_PROGRESS 101
 #define WM_USER_SERVER_CMD (WM_USER + 100)
+#define IDC_EDIT_TECH_ID 301
+#define IDC_BTN_CONNECT_TECH 302
 
 static HWND g_hwndMain = NULL;
 static HWND g_hwndProgress = NULL;
 static HWND g_hwndButton = NULL;
+static HWND g_hwndEditTech = NULL;
+static HWND g_hwndBtnConnectTech = NULL;
+
 static int g_current_step = 1;
 static int g_progress_val = 0;
 static usb_device_info_t g_devices[MAX_USB_DEVICES];
 static int g_num_devices = 0;
 static socket_t g_client_sock = INVALID_SOCKET;
+static char g_entered_tech_id[32] = "TECH-7891";
 
 static void refresh_usb_hardware(void) {
     g_num_devices = usb_device_enumerate_real(g_devices, MAX_USB_DEVICES);
 }
 
-// Background thread listening for remote commands from Technician Server
 static unsigned __stdcall client_network_thread(void *arg) {
     net_init();
 
@@ -37,7 +42,9 @@ static unsigned __stdcall client_network_thread(void *arg) {
 
         usbredir_packet_register_t reg_pkt;
         memset(&reg_pkt, 0, sizeof(reg_pkt));
-        strncpy(reg_pkt.client_ip, "192.168.1.40", sizeof(reg_pkt.client_ip) - 1);
+        strncpy(reg_pkt.client_ip, "192.168.10.25", sizeof(reg_pkt.client_ip) - 1);
+        strncpy(reg_pkt.target_tech_id, g_entered_tech_id, sizeof(reg_pkt.target_tech_id) - 1);
+
         if (g_num_devices > 0) {
             reg_pkt.device = g_devices[0];
         } else {
@@ -73,15 +80,32 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         g_hwndMain = hwnd;
         refresh_usb_hardware();
 
+        // Technician ID Entry Controls
+        g_hwndEditTech = CreateWindowEx(
+            WS_EX_CLIENTEDGE, "EDIT", "TECH-7891",
+            WS_CHILD | WS_VISIBLE | ES_AUTOHSCROLL,
+            240, 195, 120, 24,
+            hwnd, (HMENU)IDC_EDIT_TECH_ID, GetModuleHandle(NULL), NULL
+        );
+
+        g_hwndBtnConnectTech = CreateWindowEx(
+            0, "BUTTON", "Connect to Tech",
+            WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+            370, 195, 130, 24,
+            hwnd, (HMENU)IDC_BTN_CONNECT_TECH, GetModuleHandle(NULL), NULL
+        );
+
+        // Progress Bar
         g_hwndProgress = CreateWindowEx(
             0, PROGRESS_CLASS, NULL,
             WS_CHILD | WS_VISIBLE | PBS_SMOOTH,
-            240, 260, 280, 20,
+            240, 260, 260, 20,
             hwnd, (HMENU)201, GetModuleHandle(NULL), NULL
         );
         SendMessage(g_hwndProgress, PBM_SETRANGE, 0, MAKELPARAM(0, 100));
         SendMessage(g_hwndProgress, PBM_SETPOS, 0, 0);
 
+        // Bottom Cancel / Finish Button
         g_hwndButton = CreateWindowEx(
             0, "BUTTON", "Cancel",
             WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -89,7 +113,19 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             hwnd, (HMENU)IDCANCEL, GetModuleHandle(NULL), NULL
         );
 
-        _beginthreadex(NULL, 0, client_network_thread, NULL, 0, NULL);
+        return 0;
+    }
+
+    case WM_COMMAND: {
+        if (LOWORD(wParam) == IDC_BTN_CONNECT_TECH) {
+            GetWindowText(g_hwndEditTech, g_entered_tech_id, sizeof(g_entered_tech_id));
+            _beginthreadex(NULL, 0, client_network_thread, NULL, 0, NULL);
+        } else if (LOWORD(wParam) == IDCANCEL || LOWORD(wParam) == IDOK) {
+            if (g_client_sock != INVALID_SOCKET) {
+                net_close(g_client_sock);
+            }
+            DestroyWindow(hwnd);
+        }
         return 0;
     }
 
@@ -125,16 +161,6 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 KillTimer(hwnd, TIMER_ID_PROGRESS);
             }
             InvalidateRect(hwnd, NULL, TRUE);
-        }
-        return 0;
-    }
-
-    case WM_COMMAND: {
-        if (LOWORD(wParam) == IDCANCEL || LOWORD(wParam) == IDOK) {
-            if (g_client_sock != INVALID_SOCKET) {
-                net_close(g_client_sock);
-            }
-            DestroyWindow(hwnd);
         }
         return 0;
     }
@@ -219,11 +245,11 @@ LRESULT CALLBACK ClientWizardProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         SelectObject(hdc, (g_current_step >= 2) ? hFontTextActive : hFontTextInactive);
         SetTextColor(hdc, (g_current_step >= 2) ? RGB(30, 30, 30) : RGB(150, 150, 150));
-        TextOut(hdc, 70, y_positions[1] + 4, "Waiting for technician to start servicing your device", 53);
+        TextOut(hdc, 70, y_positions[1] + 4, "Enter Technician ID & start servicing", 37);
 
         SelectObject(hdc, hFontDetail);
         SetTextColor(hdc, RGB(100, 100, 100));
-        TextOut(hdc, 70, y_positions[1] + 28, "Technician is getting ready to service your device.", 51);
+        TextOut(hdc, 70, y_positions[1] + 28, "Technician ID:", 14);
 
         // STEP 3
         SelectObject(hdc, hFontNumActive);
