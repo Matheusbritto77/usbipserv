@@ -1,7 +1,7 @@
 # Dockerfile for USB Redirector MITM Relay Server (usbredir Core)
 FROM alpine:3.19 AS builder
 
-RUN apk add --no-req build-base cmake gcc g++ linux-headers
+RUN apk add --no-cache build-base cmake gcc g++ linux-headers
 
 WORKDIR /app
 COPY . .
