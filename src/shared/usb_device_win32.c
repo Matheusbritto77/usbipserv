@@ -52,11 +52,17 @@ int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices) {
 
         char hwid[512] = {0};
         char desc[256] = {0};
+        char friendly[256] = {0};
         char mfg[256] = {0};
 
         SetupDiGetDeviceRegistryPropertyA(
             hDevInfo, &devInfoData, SPDRP_HARDWAREID,
             NULL, (PBYTE)hwid, sizeof(hwid), NULL
+        );
+
+        SetupDiGetDeviceRegistryPropertyA(
+            hDevInfo, &devInfoData, SPDRP_FRIENDLYNAME,
+            NULL, (PBYTE)friendly, sizeof(friendly), NULL
         );
 
         SetupDiGetDeviceRegistryPropertyA(
@@ -81,19 +87,42 @@ int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices) {
             d->device_address = (uint8_t)(dev_count + 1);
             d->status = USB_STATUS_PLUGGED;
 
-            if (desc[0] != '\0') {
-                strncpy(d->product_name, desc, sizeof(d->product_name) - 1);
+            const char *raw_name = (friendly[0] != '\0') ? friendly : desc;
+            
+            // Resolve clear human readable device names
+            if (raw_name[0] != '\0' && strstr(raw_name, "Generic") == NULL && strstr(raw_name, "Composite") == NULL) {
+                strncpy(d->product_name, raw_name, sizeof(d->product_name) - 1);
+            } else if (vid == 0x0781) {
+                snprintf(d->product_name, sizeof(d->product_name), "SanDisk Ultra USB 3.0 Flash Drive");
+            } else if (vid == 0x0951) {
+                snprintf(d->product_name, sizeof(d->product_name), "Kingston DataTraveler USB Flash Drive");
+            } else if (vid == 0x046D) {
+                snprintf(d->product_name, sizeof(d->product_name), "Logitech USB Wireless Receiver / Controller");
+            } else if (vid == 0x058F) {
+                snprintf(d->product_name, sizeof(d->product_name), "Alcor Micro USB 2.0 Card Reader");
+            } else if (vid == 0x8087) {
+                snprintf(d->product_name, sizeof(d->product_name), "Intel High-Speed USB Controller Interface");
+            } else if (vid == 0x05AC) {
+                snprintf(d->product_name, sizeof(d->product_name), "Apple iPhone / iPad Mobile USB Device");
+            } else if (vid == 0x04E8) {
+                snprintf(d->product_name, sizeof(d->product_name), "Samsung Galaxy Android USB Interface");
+            } else if (vid == 0x10C4) {
+                snprintf(d->product_name, sizeof(d->product_name), "Silicon Labs CP210x USB Serial Bridge");
+            } else if (vid == 0x0403) {
+                snprintf(d->product_name, sizeof(d->product_name), "FTDI USB High-Speed Serial Adapter");
+            } else if (raw_name[0] != '\0') {
+                strncpy(d->product_name, raw_name, sizeof(d->product_name) - 1);
             } else {
-                snprintf(d->product_name, sizeof(d->product_name), "USB Device (0x%04X:0x%04X)", vid, pid);
+                snprintf(d->product_name, sizeof(d->product_name), "USB Device (VID: 0x%04X, PID: 0x%04X)", vid, pid);
             }
 
-            if (mfg[0] != '\0') {
+            if (mfg[0] != '\0' && strstr(mfg, "Generic") == NULL && strstr(mfg, "(Standard") == NULL) {
                 strncpy(d->manufacturer, mfg, sizeof(d->manufacturer) - 1);
             } else {
-                strncpy(d->manufacturer, "Generic USB Device", sizeof(d->manufacturer) - 1);
+                strncpy(d->manufacturer, "USB Standard Device", sizeof(d->manufacturer) - 1);
             }
 
-            snprintf(d->serial_number, sizeof(d->serial_number), "USB\\VID_%04X&PID_%04X\\%d", vid, pid, dev_count + 100);
+            snprintf(d->serial_number, sizeof(d->serial_number), "%04X%04X%04X", vid, pid, dev_count + 101);
 
             dev_count++;
         }

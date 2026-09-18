@@ -98,7 +98,7 @@ static void update_tree_view(void) {
 
     for (int i = 0; i < g_remote_count; i++) {
         char customerLabel[256];
-        snprintf(customerLabel, sizeof(customerLabel), "Established direct connection to Customer at %s ( TCP port:32400 )",
+        snprintf(customerLabel, sizeof(customerLabel), "Customer Host: %s  (TCP Port: 32400)",
                  g_remote_devices[i].client_ip);
 
         TVINSERTSTRUCT tvis;
@@ -110,7 +110,7 @@ static void update_tree_view(void) {
         HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
 
         char devLabel[512];
-        snprintf(devLabel, sizeof(devLabel), "%s  (s/n: %s)",
+        snprintf(devLabel, sizeof(devLabel), "%s  (Serial: %s)",
                  g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
 
         memset(&tvis, 0, sizeof(tvis));
@@ -121,7 +121,7 @@ static void update_tree_view(void) {
         HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
 
         char propLabel[512];
-        snprintf(propLabel, sizeof(propLabel), "Status: %s (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
+        snprintf(propLabel, sizeof(propLabel), "Status: %s  (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
                  usb_status_to_string(g_remote_devices[i].device.status),
                  g_remote_devices[i].device.vendor_id, g_remote_devices[i].device.product_id,
                  g_remote_devices[i].device.bus_number, g_remote_devices[i].device.device_address);
