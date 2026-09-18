@@ -23,6 +23,7 @@ typedef struct {
     char serial_number[MAX_STR_LEN];
     char product_name[MAX_STR_LEN];
     char manufacturer[MAX_STR_LEN];
+    char device_category[64];
     usb_service_status_t status;
     int progress_percent;
 } usb_device_info_t;

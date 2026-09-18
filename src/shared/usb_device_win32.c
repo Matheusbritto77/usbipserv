@@ -122,6 +122,19 @@ int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices) {
                 strncpy(d->manufacturer, "USB Standard Device", sizeof(d->manufacturer) - 1);
             }
 
+            // Determine explicit device category
+            if (vid == 0x0781 || vid == 0x0951 || strstr(d->product_name, "Flash") || strstr(d->product_name, "Cruzer") || strstr(d->product_name, "DataTraveler") || strstr(d->product_name, "Disk")) {
+                snprintf(d->device_category, sizeof(d->device_category), "[Pen Drive / Flash Storage]");
+            } else if (vid == 0x05AC || vid == 0x04E8 || vid == 0x12D1 || vid == 0x0E8D || strstr(d->product_name, "iPhone") || strstr(d->product_name, "Android") || strstr(d->product_name, "Samsung")) {
+                snprintf(d->device_category, sizeof(d->device_category), "[Smartphone / Celular]");
+            } else if (vid == 0x10C4 || vid == 0x0403 || vid == 0x1A86 || strstr(d->product_name, "Serial") || strstr(d->product_name, "Bridge") || strstr(d->product_name, "FTDI")) {
+                snprintf(d->device_category, sizeof(d->device_category), "[Adaptador Serial]");
+            } else if (vid == 0x058F || strstr(d->product_name, "Card Reader") || strstr(d->product_name, "Alcor")) {
+                snprintf(d->device_category, sizeof(d->device_category), "[Leitor de Cartão]");
+            } else {
+                snprintf(d->device_category, sizeof(d->device_category), "[Dispositivo USB]");
+            }
+
             snprintf(d->serial_number, sizeof(d->serial_number), "%04X%04X%04X", vid, pid, dev_count + 101);
 
             dev_count++;

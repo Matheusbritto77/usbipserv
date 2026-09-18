@@ -18,6 +18,7 @@ void usb_device_init(usb_device_info_t *dev) {
         snprintf(dev->product_name, sizeof(dev->product_name), "Generic USB Host Controller");
         snprintf(dev->manufacturer, sizeof(dev->manufacturer), "USB Standard Hub");
         snprintf(dev->serial_number, sizeof(dev->serial_number), "USB\\VID_05AC&PID_12A8\\1001");
+        snprintf(dev->device_category, sizeof(dev->device_category), "[Pen Drive]");
         dev->status = USB_STATUS_PLUGGED;
         dev->progress_percent = 0;
     }

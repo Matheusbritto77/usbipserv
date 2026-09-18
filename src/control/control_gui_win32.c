@@ -183,8 +183,10 @@ static void update_tree_view(void) {
         HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
 
         char devLabel[512];
-        snprintf(devLabel, sizeof(devLabel), "%s  (Serial: %s)",
-                 g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
+        const char *cat = (g_remote_devices[i].device.device_category[0] != '\0') ?
+                           g_remote_devices[i].device.device_category : "[Dispositivo USB]";
+        snprintf(devLabel, sizeof(devLabel), "%s  %s  (Serial: %s)",
+                 cat, g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
 
         memset(&tvis, 0, sizeof(tvis));
         tvis.hParent = hCustomer;
