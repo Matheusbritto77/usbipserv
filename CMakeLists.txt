@@ -53,12 +53,4 @@ target_link_libraries(usb_server PRIVATE Threads::Threads)
 target_link_libraries(usb_client PRIVATE Threads::Threads)
 target_link_libraries(usb_control PRIVATE Threads::Threads)
 
-if(APPLE)
-    add_executable(usb_client_mac
-        src/client/client_gui_mac.m
-        ${SHARED_SOURCES}
-    )
-    target_link_libraries(usb_client_mac PRIVATE Threads::Threads "-framework Cocoa")
-endif()
-
 message(STATUS "Configured USB Redirector Suite (C / usbredir core)")
