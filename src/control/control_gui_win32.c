@@ -203,7 +203,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         g_hwndTree = CreateWindowEx(
             WS_EX_CLIENTEDGE, WC_TREEVIEW, NULL,
             WS_CHILD | WS_VISIBLE | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS,
-            12, 105, 756, 335,
+            12, 120, 756, 320,
             hwnd, (HMENU)2002, GetModuleHandle(NULL), NULL
         );
 
