@@ -1,6 +1,7 @@
 #include "client_wizard.h"
 #include "usbredir_protocol.h"
 #include "network_socket.h"
+#include "web_ui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,6 +76,7 @@ static void print_step_ui(usb_service_status_t step, int progress, const usb_dev
 
 void client_wizard_run(const char *server_ip) {
     net_init();
+    web_ui_start_client(3000);
 
     usb_device_info_t dev;
     usb_device_init(&dev);
@@ -84,16 +86,9 @@ void client_wizard_run(const char *server_ip) {
     printf("========================================================\n");
     printf("          USB Redirector Customer Module (macOS)         \n");
     printf("========================================================\n");
-    printf("Enter Numeric Technician ID [default: 7891]: ");
+    printf("Connecting to Relay Server VPS at %s:%d...\n", server_ip, USBREDIR_PORT);
+    printf("Technician ID Assigned: [ %s ]\n", tech_id);
     fflush(stdout);
-
-    char input_buf[64] = {0};
-    if (fgets(input_buf, sizeof(input_buf), stdin)) {
-        input_buf[strcspn(input_buf, "\r\n")] = '\0';
-        if (strlen(input_buf) > 0) {
-            strncpy(tech_id, input_buf, sizeof(tech_id) - 1);
-        }
-    }
 
     // Step 1: Detect plugged USB
     dev.status = USB_STATUS_PLUGGED;

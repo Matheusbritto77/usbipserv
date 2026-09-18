@@ -1,12 +1,14 @@
 #include "control_panel.h"
 #include "usbredir_protocol.h"
 #include "network_socket.h"
+#include "web_ui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 void control_panel_run(const char *server_ip) {
     net_init();
+    web_ui_start_control(3001);
 
     printf("\033[H\033[J");
     printf("┌────────────────────────────────────────────────────────────────────────────┐\n");
