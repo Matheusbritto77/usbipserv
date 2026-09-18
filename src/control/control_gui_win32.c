@@ -25,7 +25,144 @@ static int g_remote_count = 0;
 
 static usb_device_info_t g_local_devices[16];
 static int g_local_count = 0;
-static int g_active_tab = 0; // 0 = Local USBs (as in photo), 1 = Remote USBs
+static int g_active_tab = 0; // 0 = Local USBs, 1 = Remote USBs
+
+// --- CUSTOM GDI VECTOR DRAWING FUNCTIONS FOR HIGH-PRECISION TOOLBAR ICONS ---
+
+static void draw_icon_computer(HDC hdc, int x, int y, bool is_blue, bool has_plus, bool has_cross) {
+    // Monitor Screen Bezel
+    RECT rcScreen = { x, y, x + 20, y + 15 };
+    HBRUSH hbBezel = CreateSolidBrush(RGB(50, 55, 60));
+    FillRect(hdc, &rcScreen, hbBezel);
+    DeleteObject(hbBezel);
+
+    // Inner Display
+    RECT rcDisplay = { x + 2, y + 2, x + 18, y + 13 };
+    HBRUSH hbDisplay = CreateSolidBrush(is_blue ? RGB(33, 150, 243) : RGB(180, 185, 190));
+    FillRect(hdc, &rcDisplay, hbDisplay);
+    DeleteObject(hbDisplay);
+
+    // Monitor Stand
+    RECT rcStand = { x + 8, y + 15, x + 12, y + 18 };
+    HBRUSH hbStand = CreateSolidBrush(RGB(100, 105, 110));
+    FillRect(hdc, &rcStand, hbStand);
+    DeleteObject(hbStand);
+
+    // Base
+    RECT rcBase = { x + 5, y + 18, x + 15, y + 20 };
+    FillRect(hdc, &rcBase, hbStand);
+    DeleteObject(hbStand);
+
+    // Badge (+ / X)
+    if (has_plus) {
+        HBRUSH hbBadge = CreateSolidBrush(RGB(76, 175, 80));
+        HBRUSH hbOld = (HBRUSH)SelectObject(hdc, hbBadge);
+        Ellipse(hdc, x + 12, y - 2, x + 22, y + 8);
+        SelectObject(hdc, hbOld);
+        DeleteObject(hbBadge);
+
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 17, y, NULL); LineTo(hdc, x + 17, y + 6);
+        MoveToEx(hdc, x + 14, y + 3, NULL); LineTo(hdc, x + 20, y + 3);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    } else if (has_cross) {
+        HBRUSH hbBadge = CreateSolidBrush(RGB(244, 67, 54));
+        HBRUSH hbOld = (HBRUSH)SelectObject(hdc, hbBadge);
+        Ellipse(hdc, x + 12, y - 2, x + 22, y + 8);
+        SelectObject(hdc, hbOld);
+        DeleteObject(hbBadge);
+
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 14, y + 1, NULL); LineTo(hdc, x + 20, y + 5);
+        MoveToEx(hdc, x + 20, y + 1, NULL); LineTo(hdc, x + 14, y + 5);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    }
+}
+
+static void draw_icon_usb_plug(HDC hdc, int x, int y, int badge_type) {
+    // Metal Plug Head
+    RECT rcMetal = { x + 2, y + 6, x + 9, y + 14 };
+    HBRUSH hbMetal = CreateSolidBrush(RGB(220, 225, 230));
+    FillRect(hdc, &rcMetal, hbMetal);
+    DeleteObject(hbMetal);
+
+    // Plug Holes
+    RECT rcH1 = { x + 4, y + 8, x + 6, y + 10 };
+    RECT rcH2 = { x + 4, y + 11, x + 6, y + 13 };
+    HBRUSH hbBlack = CreateSolidBrush(RGB(40, 40, 40));
+    FillRect(hdc, &rcH1, hbBlack);
+    FillRect(hdc, &rcH2, hbBlack);
+    DeleteObject(hbBlack);
+
+    // USB Body
+    RECT rcBody = { x + 9, y + 4, x + 20, y + 16 };
+    HBRUSH hbBody = CreateSolidBrush(RGB(70, 75, 80));
+    FillRect(hdc, &rcBody, hbBody);
+    DeleteObject(hbBody);
+
+    // Badges (Share Arrow / Checkmark / Cross / Plus / Minus)
+    if (badge_type == 0) { // Share (Green Arrow)
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(76, 175, 80));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 12, y + 2, NULL); LineTo(hdc, x + 20, y + 2);
+        MoveToEx(hdc, x + 17, y, NULL); LineTo(hdc, x + 20, y + 2);
+        MoveToEx(hdc, x + 17, y + 4, NULL); LineTo(hdc, x + 20, y + 2);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    } else if (badge_type == 1 || badge_type == 3) { // Red Cross (Unshare / Disconnect)
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(244, 67, 54));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 14, y, NULL); LineTo(hdc, x + 20, y + 6);
+        MoveToEx(hdc, x + 20, y, NULL); LineTo(hdc, x + 14, y + 6);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    } else if (badge_type == 2) { // Green Checkmark (Connect)
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(76, 175, 80));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 13, y + 3, NULL); LineTo(hdc, x + 16, y + 6);
+        MoveToEx(hdc, x + 16, y + 6, NULL); LineTo(hdc, x + 22, y);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    } else if (badge_type == 4) { // Add Exclusion (+)
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(156, 39, 176));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 17, y, NULL); LineTo(hdc, x + 17, y + 6);
+        MoveToEx(hdc, x + 14, y + 3, NULL); LineTo(hdc, x + 20, y + 3);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    } else if (badge_type == 5) { // Remove Exclusion (-)
+        HPEN hp = CreatePen(PS_SOLID, 2, RGB(121, 85, 72));
+        HPEN hpOld = (HPEN)SelectObject(hdc, hp);
+        MoveToEx(hdc, x + 14, y + 3, NULL); LineTo(hdc, x + 20, y + 3);
+        SelectObject(hdc, hpOld);
+        DeleteObject(hp);
+    }
+}
+
+static void draw_icon_auto_share(HDC hdc, int x, int y) {
+    // Red Bold "auto" Text
+    HFONT hFontAuto = CreateFont(12, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                 DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                 CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+    HFONT hOldFont = (HFONT)SelectObject(hdc, hFontAuto);
+    SetTextColor(hdc, RGB(220, 20, 20));
+    TextOut(hdc, x + 4, y - 2, "auto", 4);
+    SelectObject(hdc, hOldFont);
+    DeleteObject(hFontAuto);
+
+    // Hand holding USB Plug
+    HBRUSH hbHand = CreateSolidBrush(RGB(240, 180, 140));
+    HBRUSH hbOld = (HBRUSH)SelectObject(hdc, hbHand);
+    RoundRect(hdc, x + 2, y + 10, x + 20, y + 18, 4, 4);
+    SelectObject(hdc, hbOld);
+    DeleteObject(hbHand);
+
+    draw_icon_usb_plug(hdc, x + 3, y + 4, -1);
+}
 
 static void refresh_local_usb(void) {
     g_local_count = usb_device_enumerate_real(g_local_devices, 16);
@@ -83,7 +220,6 @@ static void update_tree_view(void) {
                 TreeView_InsertItem(g_hwndTree, &tvis);
             }
         } else {
-            // Default sample items matching image if physical list is empty
             memset(&tvis, 0, sizeof(tvis));
             tvis.hParent = hLocalHost;
             tvis.hInsertAfter = TVI_LAST;
@@ -211,7 +347,6 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
     case WM_CREATE: {
         g_hwndMain = hwnd;
 
-        // Menu items matching reference image: Program, Edit, Sharing, Connect, Remote Control, Exclusion List, Settings, Help
         HMENU hMenuBar = CreateMenu();
         HMENU hMenuProgram = CreatePopupMenu();
         HMENU hMenuEdit = CreatePopupMenu();
@@ -238,7 +373,6 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         SetMenu(hwnd, hMenuBar);
 
-        // Tab Control matching image order: 0 = Local USBs, 1 = Remote USBs
         g_hwndTab = CreateWindowEx(
             0, WC_TABCONTROL, NULL,
             WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
@@ -309,7 +443,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
 
-        // Toolbar Background
+        // Toolbar Background Banner
         RECT rcToolbar = { 0, 0, 760, 40 };
         HBRUSH htbBrush = CreateSolidBrush(RGB(240, 242, 245));
         FillRect(hdc, &rcToolbar, htbBrush);
@@ -320,38 +454,43 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         MoveToEx(hdc, 0, 40, NULL);
         LineTo(hdc, 760, 40);
 
-        SetBkMode(hdc, TRANSPARENT);
-        HFONT hFontBtn = CreateFont(13, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                    DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                    CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-        HFONT hOldFont = (HFONT)SelectObject(hdc, hFontBtn);
-
-        // Toolbar Button Definitions matching reference image icons:
-        // 1. Add Conn | 2. Remove Conn | 3. Share USB | 4. Unshare USB | 5. Auto Share | 6. Connect | 7. Disconnect
-        struct { int x1; int x2; const char *label; COLORREF color; } btnList[] = {
-            { 10, 65,  "🖥️+",   RGB(33, 150, 243) },
-            { 70, 125, "🖥️✖",   RGB(244, 67, 54) },
-            { 135, 190, "🔌➔",  RGB(76, 175, 80) },
-            { 195, 250, "🔌✖",  RGB(244, 67, 54) },
-            { 255, 325, "🫴 auto", RGB(233, 30, 99) },
-            { 330, 390, "🔌✔",  RGB(46, 125, 50) },
-            { 395, 455, "🔌✖",  RGB(211, 47, 47) },
-            { 460, 520, "🔌+",  RGB(156, 39, 176) },
-            { 525, 585, "🔌-",  RGB(121, 85, 72) }
-        };
+        // Render Toolbar Buttons with Crisp GDI Vector Icons
+        int btnWidths[9] = { 40, 40, 40, 40, 50, 40, 40, 40, 40 };
+        int xOffset = 10;
 
         for (int i = 0; i < 9; i++) {
-            RECT rcBtn = { btnList[i].x1, 6, btnList[i].x2, 34 };
+            RECT rcBtn = { xOffset, 6, xOffset + btnWidths[i], 34 };
             HBRUSH hb = CreateSolidBrush(RGB(255, 255, 255));
             FillRect(hdc, &rcBtn, hb);
             DeleteObject(hb);
             FrameRect(hdc, &rcBtn, (HBRUSH)GetStockObject(BLACK_BRUSH));
-            SetTextColor(hdc, btnList[i].color);
-            DrawText(hdc, btnList[i].label, -1, &rcBtn, DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+
+            int iconX = xOffset + (btnWidths[i] - 20) / 2;
+            int iconY = 10;
+
+            switch (i) {
+                case 0: draw_icon_computer(hdc, iconX, iconY, true, true, false); break;  // Add Computer
+                case 1: draw_icon_computer(hdc, iconX, iconY, false, false, true); break; // Remove Computer
+                case 2: draw_icon_usb_plug(hdc, iconX, iconY, 0); break;                 // Share USB
+                case 3: draw_icon_usb_plug(hdc, iconX, iconY, 1); break;                 // Unshare USB
+                case 4: draw_icon_auto_share(hdc, iconX - 4, iconY); break;              // Auto Share
+                case 5: draw_icon_usb_plug(hdc, iconX, iconY, 2); break;                 // Connect Remote
+                case 6: draw_icon_usb_plug(hdc, iconX, iconY, 3); break;                 // Disconnect Remote
+                case 7: draw_icon_usb_plug(hdc, iconX, iconY, 4); break;                 // Add Exclusion
+                case 8: draw_icon_usb_plug(hdc, iconX, iconY, 5); break;                 // Remove Exclusion
+            }
+
+            xOffset += btnWidths[i] + 6;
         }
 
-        // Numeric ID Badge Banner on top right
-        RECT rcTechId = { 595, 6, 755, 34 };
+        // Numeric ID Banner on Top Right
+        SetBkMode(hdc, TRANSPARENT);
+        HFONT hFontId = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
+                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                   CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
+        HFONT hOldFont = (HFONT)SelectObject(hdc, hFontId);
+
+        RECT rcTechId = { 580, 6, 755, 34 };
         SetTextColor(hdc, RGB(21, 101, 192));
         char techIdBanner[128];
         snprintf(techIdBanner, sizeof(techIdBanner), "ID: [%s]", g_assigned_tech_id);
@@ -359,7 +498,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         SelectObject(hdc, hOldFont);
         SelectObject(hdc, hOldPen);
-        DeleteObject(hFontBtn);
+        DeleteObject(hFontId);
         DeleteObject(hPenLine);
 
         EndPaint(hwnd, &ps);
@@ -370,9 +509,10 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         int x = LOWORD(lParam);
         int y = HIWORD(lParam);
         if (y >= 6 && y <= 34) {
-            if (x >= 330 && x <= 390) {
+            // Button 6: Connect Remote (330..370), Button 7: Disconnect (376..416)
+            if (x >= 330 && x <= 370) {
                 SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDM_CONNECT_DEVICE, 0), 0);
-            } else if (x >= 395 && x <= 455) {
+            } else if (x >= 376 && x <= 416) {
                 SendMessage(hwnd, WM_COMMAND, MAKEWPARAM(IDM_DISCONNECT_DEVICE, 0), 0);
             }
         }
