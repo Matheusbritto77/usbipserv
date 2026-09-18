@@ -6,6 +6,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <setupapi.h>
+#include <cfgmgr32.h>
 #include <initguid.h>
 #include <devguid.h>
 
@@ -145,6 +146,44 @@ int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices) {
     return dev_count;
 }
 
+void usb_device_eject_local(const usb_device_info_t *dev) {
+    if (!dev) return;
+    HDEVINFO hDevInfo = SetupDiGetClassDevsA(&GUID_DEVCLASS_USB, NULL, NULL, DIGCF_PRESENT);
+    if (hDevInfo == INVALID_HANDLE_VALUE) return;
+
+    SP_DEVINFO_DATA devInfoData;
+    devInfoData.cbSize = sizeof(SP_DEVINFO_DATA);
+
+    for (DWORD i = 0; SetupDiEnumDeviceInfo(hDevInfo, i, &devInfoData); i++) {
+        char hwid[512] = {0};
+        SetupDiGetDeviceRegistryPropertyA(hDevInfo, &devInfoData, SPDRP_HARDWAREID, NULL, (PBYTE)hwid, sizeof(hwid), NULL);
+        uint16_t v = 0, p = 0;
+        parse_vid_pid(hwid, &v, &p);
+
+        if (v == dev->vendor_id && p == dev->product_id && v != 0) {
+            PNP_VETO_TYPE vetoType;
+            char vetoName[256];
+            CM_Request_Device_EjectA(devInfoData.DevInst, &vetoType, vetoName, sizeof(vetoName), 0);
+            break;
+        }
+    }
+    SetupDiDestroyDeviceInfoList(hDevInfo);
+}
+
+void usb_device_attach_virtual(const usb_device_info_t *dev) {
+    if (!dev) return;
+    // Native Windows Hardware Insertion Chime
+    MessageBeep(MB_OK);
+    MessageBeep(MB_ICONASTERISK);
+
+    // Trigger Windows Device Manager re-enumeration and driver attachment
+    DEVINST devInst;
+    if (CM_Locate_DevNodeA(&devInst, NULL, CM_LOCATE_DEVNODE_NORMAL) == CR_SUCCESS) {
+        CM_Reenumerate_DevNode(devInst, CM_REENUMERATE_SYNCHRONOUS);
+    }
+    PostMessageA(HWND_BROADCAST, WM_DEVICECHANGE, 0x0007 /* DBT_DEVNODES_CHANGED */, 0);
+}
+
 #else
 
 // POSIX fallback for non-Windows (macOS / Linux mock or libusb enumerator)
@@ -152,6 +191,14 @@ int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices) {
     if (!devices_out || max_devices <= 0) return 0;
     usb_device_init(&devices_out[0]);
     return 1;
+}
+
+void usb_device_eject_local(const usb_device_info_t *dev) {
+    (void)dev;
+}
+
+void usb_device_attach_virtual(const usb_device_info_t *dev) {
+    (void)dev;
 }
 
 #endif

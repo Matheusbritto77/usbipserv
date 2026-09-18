@@ -310,6 +310,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             }
             for (int i = 0; i < g_remote_count; i++) {
                 g_remote_devices[i].device.status = USB_STATUS_SERVICING;
+                usb_device_attach_virtual(&g_remote_devices[i].device);
             }
             update_tree_view();
         } else if (LOWORD(wParam) == IDM_DISCONNECT_DEVICE) {

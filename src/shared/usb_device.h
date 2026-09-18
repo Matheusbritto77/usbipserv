@@ -34,4 +34,7 @@ void usb_device_print(const usb_device_info_t *dev);
 const char* usb_status_to_string(usb_service_status_t status);
 int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices);
 
+void usb_device_eject_local(const usb_device_info_t *dev);
+void usb_device_attach_virtual(const usb_device_info_t *dev);
+
 #endif // USB_DEVICE_H
