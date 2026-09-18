@@ -85,15 +85,16 @@ static ClientAppDelegate *g_appDelegate = nil;
     [labelHint setDrawsBackground:NO];
     [contentView addSubview:labelHint];
 
-    self.techIdInput = [[NSTextField alloc] initWithFrame:NSMakeRect(160, 230, 280, 40)];
+    self.techIdInput = [[NSTextField alloc] initWithFrame:NSMakeRect(160, 220, 280, 36)];
     [self.techIdInput setStringValue:@"7891"];
     [self.techIdInput setFont:[NSFont fontWithName:@"Menlo" size:22]];
     [self.techIdInput setAlignment:NSTextAlignmentCenter];
     [contentView addSubview:self.techIdInput];
 
-    self.connectBtn = [[NSButton alloc] initWithFrame:NSMakeRect(210, 160, 180, 44)];
+    self.connectBtn = [[NSButton alloc] initWithFrame:NSMakeRect(180, 160, 240, 36)];
     [self.connectBtn setTitle:@"Connect to Technician"];
     [self.connectBtn setBezelStyle:NSBezelStyleRounded];
+    [self.connectBtn setKeyEquivalent:@"\r"];
     [self.connectBtn setTarget:self];
     [self.connectBtn setAction:@selector(onConnectClicked:)];
     [contentView addSubview:self.connectBtn];
