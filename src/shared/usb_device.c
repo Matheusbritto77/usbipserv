@@ -26,11 +26,11 @@ void usb_device_init(usb_device_info_t *dev) {
 const char* usb_status_to_string(usb_service_status_t status) {
     switch (status) {
         case USB_STATUS_DISCONNECTED: return "Disconnected";
-        case USB_STATUS_PLUGGED:      return "Plugged In";
+        case USB_STATUS_PLUGGED:      return "Plugged In & Ready (Click Connect)";
         case USB_STATUS_WAITING_TECH: return "Waiting for technician";
-        case USB_STATUS_SERVICING:    return "Servicing device";
+        case USB_STATUS_SERVICING:    return "Connected [OK] (Active Data Stream)";
         case USB_STATUS_FINISHED:     return "Servicing finished";
-        default:                      return "Unknown";
+        default:                      return "Ready";
     }
 }
 

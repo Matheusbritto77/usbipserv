@@ -305,17 +305,21 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 usbredir_header_t hdr;
                 usbredir_header_init(&hdr, USBREDIR_CMD_START_SERVICE, 0);
                 net_send_all(g_tech_sock, &hdr, sizeof(hdr));
-                MessageBox(hwnd, "Sent 'Connect USB' command to remote Customer Client via usbredir.", "USB Redirector Control", MB_OK | MB_ICONINFORMATION);
-            } else {
-                MessageBox(hwnd, "Simulated 'Connect USB' command sent to remote Customer Client.", "USB Redirector Control", MB_OK | MB_ICONINFORMATION);
             }
+            for (int i = 0; i < g_remote_count; i++) {
+                g_remote_devices[i].device.status = USB_STATUS_SERVICING;
+            }
+            update_tree_view();
         } else if (LOWORD(wParam) == IDM_DISCONNECT_DEVICE) {
             if (g_tech_sock != INVALID_SOCKET) {
                 usbredir_header_t hdr;
                 usbredir_header_init(&hdr, USBREDIR_CMD_FINISH_SERVICE, 0);
                 net_send_all(g_tech_sock, &hdr, sizeof(hdr));
             }
-            MessageBox(hwnd, "Disconnected remote USB device.", "USB Redirector Control", MB_OK | MB_ICONINFORMATION);
+            for (int i = 0; i < g_remote_count; i++) {
+                g_remote_devices[i].device.status = USB_STATUS_DISCONNECTED;
+            }
+            update_tree_view();
         } else if (LOWORD(wParam) == IDM_REFRESH_LIST) {
             update_tree_view();
         } else if (LOWORD(wParam) == IDM_SETTINGS) {
