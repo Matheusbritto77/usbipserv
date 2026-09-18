@@ -79,10 +79,26 @@ void client_wizard_run(const char *server_ip) {
     usb_device_info_t dev;
     usb_device_init(&dev);
 
+    char tech_id[32] = "7891";
+    printf("\033[H\033[J");
+    printf("========================================================\n");
+    printf("          USB Redirector Customer Module (macOS)         \n");
+    printf("========================================================\n");
+    printf("Enter Numeric Technician ID [default: 7891]: ");
+    fflush(stdout);
+
+    char input_buf[64] = {0};
+    if (fgets(input_buf, sizeof(input_buf), stdin)) {
+        input_buf[strcspn(input_buf, "\r\n")] = '\0';
+        if (strlen(input_buf) > 0) {
+            strncpy(tech_id, input_buf, sizeof(tech_id) - 1);
+        }
+    }
+
     // Step 1: Detect plugged USB
     dev.status = USB_STATUS_PLUGGED;
     print_step_ui(dev.status, 0, &dev);
-    sleep_ms(2000);
+    sleep_ms(1500);
 
     // Step 2: Register with Server Relay
     dev.status = USB_STATUS_WAITING_TECH;
@@ -94,28 +110,38 @@ void client_wizard_run(const char *server_ip) {
         usbredir_header_init(&hdr, USBREDIR_CMD_REGISTER_CLIENT, sizeof(usbredir_packet_register_t));
 
         usbredir_packet_register_t reg_pkt;
-        strncpy(reg_pkt.client_ip, "192.168.1.40", sizeof(reg_pkt.client_ip));
+        memset(&reg_pkt, 0, sizeof(reg_pkt));
+        strncpy(reg_pkt.client_ip, "192.168.10.50 (macOS)", sizeof(reg_pkt.client_ip) - 1);
+        strncpy(reg_pkt.target_tech_id, tech_id, sizeof(reg_pkt.target_tech_id) - 1);
         reg_pkt.device = dev;
 
         net_send_all(sock, &hdr, sizeof(hdr));
         net_send_all(sock, &reg_pkt, sizeof(reg_pkt));
-    }
-    sleep_ms(2500);
 
-    // Step 3: Servicing device (simulate animated progress)
-    dev.status = USB_STATUS_SERVICING;
-    for (int p = 0; p <= 100; p += 10) {
-        dev.progress_percent = p;
-        print_step_ui(dev.status, p, &dev);
-        sleep_ms(400);
-    }
+        while (1) {
+            usbredir_header_t rx_hdr;
+            if (net_recv_all(sock, &rx_hdr, sizeof(rx_hdr)) < 0) break;
 
-    // Step 4: Servicing finished
-    dev.status = USB_STATUS_FINISHED;
-    print_step_ui(dev.status, 100, &dev);
-
-    if (sock != INVALID_SOCKET) {
+            if (usbredir_header_verify(&rx_hdr)) {
+                if (rx_hdr.cmd == USBREDIR_CMD_START_SERVICE) {
+                    // Step 3: Servicing device
+                    dev.status = USB_STATUS_SERVICING;
+                    for (int p = 0; p <= 100; p += 10) {
+                        dev.progress_percent = p;
+                        print_step_ui(dev.status, p, &dev);
+                        sleep_ms(250);
+                    }
+                } else if (rx_hdr.cmd == USBREDIR_CMD_FINISH_SERVICE) {
+                    // Step 4: Servicing finished
+                    dev.status = USB_STATUS_FINISHED;
+                    print_step_ui(dev.status, 100, &dev);
+                    break;
+                }
+            }
+        }
         net_close(sock);
+    } else {
+        printf("\nFailed to connect to relay server at %s:%d\n", server_ip, USBREDIR_PORT);
     }
     net_cleanup();
 }
