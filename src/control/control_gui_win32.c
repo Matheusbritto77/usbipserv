@@ -18,6 +18,7 @@
 #define WM_USER_REFRESH_TREE (WM_USER + 200)
 
 static HWND g_hwndMain = NULL;
+static HWND g_hwndTab = NULL;
 static HWND g_hwndTree = NULL;
 static socket_t g_tech_sock = INVALID_SOCKET;
 
@@ -199,12 +200,30 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         SetMenu(hwnd, hMenuBar);
 
-        // Single TreeView Control directly embedded (Single Tab / View)
+        // Native Tab Control with EXACTLY ONE TAB (Remote USB devices available for connection)
+        g_hwndTab = CreateWindowEx(
+            0, WC_TABCONTROL, "",
+            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
+            10, 100, 756, 340,
+            hwnd, (HMENU)2001, GetModuleHandle(NULL), NULL
+        );
+
+        TCITEM tie;
+        memset(&tie, 0, sizeof(tie));
+        tie.mask = TCIF_TEXT;
+        tie.pszText = "Remote USB devices available for connection";
+        TabCtrl_InsertItem(g_hwndTab, 0, &tie);
+
+        RECT rcTab;
+        GetClientRect(g_hwndTab, &rcTab);
+        TabCtrl_AdjustRect(g_hwndTab, FALSE, &rcTab);
+
+        // TreeView embedded cleanly inside the single Tab Control page
         g_hwndTree = CreateWindowEx(
             WS_EX_CLIENTEDGE, WC_TREEVIEW, NULL,
             WS_CHILD | WS_VISIBLE | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS,
-            12, 120, 756, 320,
-            hwnd, (HMENU)2002, GetModuleHandle(NULL), NULL
+            rcTab.left, rcTab.top, rcTab.right - rcTab.left, rcTab.bottom - rcTab.top,
+            g_hwndTab, (HMENU)2002, GetModuleHandle(NULL), NULL
         );
 
         update_tree_view();
@@ -350,20 +369,11 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
         RECT rcT4 = { 420, 58, 490, 88 };
         DrawText(hdc, "Settings", -1, &rcT4, DT_LEFT | DT_VCENTER | DT_SINGLELINE);
 
-        // Single View Title Header
-        HFONT hFontTabHead = CreateFont(14, 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-                                        DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                        CLEARTYPE_QUALITY, DEFAULT_PITCH, "Segoe UI");
-        SelectObject(hdc, hFontTabHead);
-        SetTextColor(hdc, RGB(50, 55, 65));
-        TextOut(hdc, 14, 98, "Remote USB Devices Shared With Us:", 34);
-
         SelectObject(hdc, hOldFont);
         SelectObject(hdc, hOldPen);
         DeleteObject(hFontTitle);
         DeleteObject(hFontId);
         DeleteObject(hFontBtn);
-        DeleteObject(hFontTabHead);
         DeleteObject(hPenLine);
 
         EndPaint(hwnd, &ps);
@@ -392,8 +402,14 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
     case WM_SIZE: {
         int width = LOWORD(lParam);
         int height = HIWORD(lParam);
-        if (g_hwndTree) {
-            SetWindowPos(g_hwndTree, NULL, 12, 120, width - 24, height - 132, SWP_NOZORDER);
+        if (g_hwndTab) {
+            SetWindowPos(g_hwndTab, NULL, 10, 100, width - 20, height - 110, SWP_NOZORDER);
+            RECT rcTab;
+            GetClientRect(g_hwndTab, &rcTab);
+            TabCtrl_AdjustRect(g_hwndTab, FALSE, &rcTab);
+            if (g_hwndTree) {
+                SetWindowPos(g_hwndTree, NULL, rcTab.left, rcTab.top, rcTab.right - rcTab.left, rcTab.bottom - rcTab.top, SWP_NOZORDER);
+            }
         }
         return 0;
     }
@@ -411,7 +427,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
     INITCOMMONCONTROLSEX icex;
     icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
-    icex.dwICC = ICC_TREEVIEW_CLASSES;
+    icex.dwICC = ICC_TREEVIEW_CLASSES | ICC_TAB_CLASSES;
     InitCommonControlsEx(&icex);
 
     const char CLASS_NAME[] = "UsbRedirectorControlPanel";
