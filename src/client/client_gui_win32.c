@@ -7,11 +7,13 @@
 #include <process.h>
 #include "usb_device.h"
 #include "usbredir_protocol.h"
+#include "ipc_channel.h"
 
 #pragma comment(lib, "comctl32.lib")
 
 #define TIMER_ID_PROGRESS 101
 #define WM_USER_SERVER_CMD (WM_USER + 100)
+#define WM_USER_IPC_EVENT   (WM_USER + 101)
 
 #define IDC_EDIT_TECH_ID 301
 #define IDC_BTN_CONNECT_TECH 302

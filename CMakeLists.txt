@@ -23,6 +23,7 @@ set(SHARED_SOURCES
     src/shared/usb_device_win32.c
     src/shared/usbredir_protocol.c
     src/shared/network_socket.c
+    src/shared/ipc_channel.c
 )
 
 # 1. Server Component (Relay MITM Broker)
