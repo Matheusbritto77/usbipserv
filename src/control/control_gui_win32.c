@@ -19,21 +19,19 @@
 
 static HWND g_hwndMain = NULL;
 static HWND g_hwndTree = NULL;
+static HIMAGELIST g_hImageList = NULL;
 static socket_t g_tech_sock = INVALID_SOCKET;
 
 static char g_assigned_tech_id[32] = "7891";
 static usbredir_packet_register_t g_remote_devices[16];
 static int g_remote_count = 0;
 
-// GDI Vector Icon Helper Functions for Modern Single-Tab UI
 static void draw_modern_usb_icon(HDC hdc, int x, int y, COLORREF color) {
-    // Metal Plug
     RECT rcMetal = { x + 2, y + 5, x + 8, y + 13 };
     HBRUSH hbMetal = CreateSolidBrush(RGB(210, 215, 220));
     FillRect(hdc, &rcMetal, hbMetal);
     DeleteObject(hbMetal);
 
-    // Plug Holes
     RECT rcH1 = { x + 4, y + 7, x + 6, y + 9 };
     RECT rcH2 = { x + 4, y + 10, x + 6, y + 12 };
     HBRUSH hbBlack = CreateSolidBrush(RGB(30, 30, 30));
@@ -41,7 +39,6 @@ static void draw_modern_usb_icon(HDC hdc, int x, int y, COLORREF color) {
     FillRect(hdc, &rcH2, hbBlack);
     DeleteObject(hbBlack);
 
-    // Plug Body
     RECT rcBody = { x + 8, y + 3, x + 18, y + 15 };
     HBRUSH hbBody = CreateSolidBrush(color);
     FillRect(hdc, &rcBody, hbBody);
@@ -78,6 +75,80 @@ static void draw_modern_settings_icon(HDC hdc, int x, int y) {
     DeleteObject(hp);
 }
 
+static HICON create_gdi_icon(int type) {
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcMem = CreateCompatibleDC(hdcScreen);
+    HBITMAP hBmp = CreateCompatibleBitmap(hdcScreen, 16, 16);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hdcMem, hBmp);
+
+    RECT rc = { 0, 0, 16, 16 };
+    HBRUSH hbBg = CreateSolidBrush(RGB(255, 255, 255));
+    FillRect(hdcMem, &rc, hbBg);
+    DeleteObject(hbBg);
+
+    if (type == 0) {
+        RECT rcMon = { 1, 1, 15, 11 };
+        HBRUSH hbFrame = CreateSolidBrush(RGB(40, 50, 65));
+        FillRect(hdcMem, &rcMon, hbFrame);
+        DeleteObject(hbFrame);
+
+        RECT rcScreen = { 2, 2, 14, 10 };
+        HBRUSH hbScr = CreateSolidBrush(RGB(33, 150, 243));
+        FillRect(hdcMem, &rcScreen, hbScr);
+        DeleteObject(hbScr);
+
+        RECT rcStand = { 7, 11, 9, 15 };
+        HBRUSH hbStand = CreateSolidBrush(RGB(120, 125, 135));
+        FillRect(hdcMem, &rcStand, hbStand);
+        DeleteObject(hbStand);
+    } else if (type == 1) {
+        RECT rcMetal = { 5, 2, 11, 7 };
+        HBRUSH hbMetal = CreateSolidBrush(RGB(200, 205, 215));
+        FillRect(hdcMem, &rcMetal, hbMetal);
+        DeleteObject(hbMetal);
+
+        RECT rcBody = { 3, 7, 13, 15 };
+        HBRUSH hbBody = CreateSolidBrush(RGB(46, 125, 50));
+        FillRect(hdcMem, &rcBody, hbBody);
+        DeleteObject(hbBody);
+    } else {
+        HBRUSH hbGreen = CreateSolidBrush(RGB(76, 175, 80));
+        HBRUSH hbOld = (HBRUSH)SelectObject(hdcMem, hbGreen);
+        Ellipse(hdcMem, 2, 2, 14, 14);
+        SelectObject(hdcMem, hbOld);
+        DeleteObject(hbGreen);
+    }
+
+    SelectObject(hdcMem, hOldBmp);
+    DeleteDC(hdcMem);
+    ReleaseDC(NULL, hdcScreen);
+
+    ICONINFO ii = { 0 };
+    ii.fIcon = TRUE;
+    ii.hbmColor = hBmp;
+    ii.hbmMask = hBmp;
+    HICON hIcon = CreateIconIndirect(&ii);
+    DeleteObject(hBmp);
+    return hIcon;
+}
+
+static void init_tree_imagelist(HWND hwndTree) {
+    g_hImageList = ImageList_Create(16, 16, ILC_COLOR32 | ILC_MASK, 3, 3);
+    HICON h1 = create_gdi_icon(0);
+    HICON h2 = create_gdi_icon(1);
+    HICON h3 = create_gdi_icon(2);
+
+    ImageList_AddIcon(g_hImageList, h1);
+    ImageList_AddIcon(g_hImageList, h2);
+    ImageList_AddIcon(g_hImageList, h3);
+
+    DestroyIcon(h1);
+    DestroyIcon(h2);
+    DestroyIcon(h3);
+
+    TreeView_SetImageList(hwndTree, g_hImageList, TVSIL_NORMAL);
+}
+
 static void update_tree_view(void) {
     if (!g_hwndTree) return;
 
@@ -105,7 +176,9 @@ static void update_tree_view(void) {
         memset(&tvis, 0, sizeof(tvis));
         tvis.hParent = TVI_ROOT;
         tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
+        tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+        tvis.item.iImage = 0;
+        tvis.item.iSelectedImage = 0;
         tvis.item.pszText = customerLabel;
         HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
 
@@ -116,7 +189,9 @@ static void update_tree_view(void) {
         memset(&tvis, 0, sizeof(tvis));
         tvis.hParent = hCustomer;
         tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
+        tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+        tvis.item.iImage = 1;
+        tvis.item.iSelectedImage = 1;
         tvis.item.pszText = devLabel;
         HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
 
@@ -129,7 +204,9 @@ static void update_tree_view(void) {
         memset(&tvis, 0, sizeof(tvis));
         tvis.hParent = hDevice;
         tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT;
+        tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+        tvis.item.iImage = 2;
+        tvis.item.iSelectedImage = 2;
         tvis.item.pszText = propLabel;
         TreeView_InsertItem(g_hwndTree, &tvis);
 
@@ -207,6 +284,7 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
             hwnd, (HMENU)2002, GetModuleHandle(NULL), NULL
         );
 
+        init_tree_imagelist(g_hwndTree);
         update_tree_view();
 
         _beginthreadex(NULL, 0, tech_network_thread, NULL, 0, NULL);
