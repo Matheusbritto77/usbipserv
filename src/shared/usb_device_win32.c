@@ -6,8 +6,8 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <setupapi.h>
-#include <devguid.h>
 #include <initguid.h>
+#include <devguid.h>
 
 // Parse VID and PID from Hardware ID string (e.g. "USB\\VID_046D&PID_C52B&REV_2411")
 static void parse_vid_pid(const char *hwid, uint16_t *vid, uint16_t *pid) {
