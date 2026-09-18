@@ -24,6 +24,7 @@ set(SHARED_SOURCES
     src/shared/usbredir_protocol.c
     src/shared/network_socket.c
     src/shared/ipc_channel.c
+    src/shared/service_installer.c
 )
 
 # 1. Server Component (Relay MITM Broker)
