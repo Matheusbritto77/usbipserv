@@ -225,6 +225,7 @@ static ClientAppDelegate *g_appDelegate = nil;
 int main(int argc, const char * argv[]) {
     @autoreleasepool {
         NSApplication *app = [NSApplication sharedApplication];
+        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
         g_appDelegate = [[ClientAppDelegate alloc] init];
         [app setDelegate:g_appDelegate];
         [app run];
