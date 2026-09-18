@@ -18,7 +18,6 @@
 #define WM_USER_REFRESH_TREE (WM_USER + 200)
 
 static HWND g_hwndMain = NULL;
-static HWND g_hwndTab = NULL;
 static HWND g_hwndTree = NULL;
 static socket_t g_tech_sock = INVALID_SOCKET;
 
@@ -200,30 +199,12 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         SetMenu(hwnd, hMenuBar);
 
-        // Native Tab Control with EXACTLY ONE TAB (Remote USB devices available for connection)
-        g_hwndTab = CreateWindowEx(
-            0, WC_TABCONTROL, "",
-            WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS,
-            10, 100, 756, 340,
-            hwnd, (HMENU)2001, GetModuleHandle(NULL), NULL
-        );
-
-        TCITEM tie;
-        memset(&tie, 0, sizeof(tie));
-        tie.mask = TCIF_TEXT;
-        tie.pszText = "Remote USB devices available for connection";
-        TabCtrl_InsertItem(g_hwndTab, 0, &tie);
-
-        RECT rcTab;
-        GetClientRect(g_hwndTab, &rcTab);
-        TabCtrl_AdjustRect(g_hwndTab, FALSE, &rcTab);
-
-        // TreeView embedded cleanly inside the single Tab Control page
+        // Direct Clean TreeView Control (No Tab Control / No Tabs)
         g_hwndTree = CreateWindowEx(
             WS_EX_CLIENTEDGE, WC_TREEVIEW, NULL,
             WS_CHILD | WS_VISIBLE | TVS_HASLINES | TVS_LINESATROOT | TVS_HASBUTTONS,
-            rcTab.left, rcTab.top, rcTab.right - rcTab.left, rcTab.bottom - rcTab.top,
-            g_hwndTab, (HMENU)2002, GetModuleHandle(NULL), NULL
+            10, 105, 756, 335,
+            hwnd, (HMENU)2002, GetModuleHandle(NULL), NULL
         );
 
         update_tree_view();
@@ -402,14 +383,8 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
     case WM_SIZE: {
         int width = LOWORD(lParam);
         int height = HIWORD(lParam);
-        if (g_hwndTab) {
-            SetWindowPos(g_hwndTab, NULL, 10, 100, width - 20, height - 110, SWP_NOZORDER);
-            RECT rcTab;
-            GetClientRect(g_hwndTab, &rcTab);
-            TabCtrl_AdjustRect(g_hwndTab, FALSE, &rcTab);
-            if (g_hwndTree) {
-                SetWindowPos(g_hwndTree, NULL, rcTab.left, rcTab.top, rcTab.right - rcTab.left, rcTab.bottom - rcTab.top, SWP_NOZORDER);
-            }
+        if (g_hwndTree) {
+            SetWindowPos(g_hwndTree, NULL, 10, 105, width - 20, height - 117, SWP_NOZORDER);
         }
         return 0;
     }
