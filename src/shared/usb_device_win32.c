@@ -37,7 +37,7 @@ int usb_device_enumerate_real(usb_device_info_t *devices_out, int max_devices) {
     if (!devices_out || max_devices <= 0) return 0;
 
     HDEVINFO hDevInfo = SetupDiGetClassDevsA(
-        &GUID_DEVCLASS_USB, NULL, NULL, DIGCF_PRESENT
+        NULL, NULL, NULL, DIGCF_ALLCLASSES | DIGCF_PRESENT
     );
 
     if (hDevInfo == INVALID_HANDLE_VALUE) {

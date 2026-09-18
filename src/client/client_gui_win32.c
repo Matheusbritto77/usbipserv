@@ -55,10 +55,13 @@ static unsigned __stdcall client_network_thread(void *arg) {
         strncpy(reg_pkt.client_ip, "192.168.10.25", sizeof(reg_pkt.client_ip) - 1);
         strncpy(reg_pkt.target_tech_id, g_entered_tech_id, sizeof(reg_pkt.target_tech_id) - 1);
 
+        reg_pkt.device_count = (g_num_devices > 0) ? ((g_num_devices > 8) ? 8 : g_num_devices) : 1;
         if (g_num_devices > 0) {
-            reg_pkt.device = g_devices[0];
+            for (int i = 0; i < reg_pkt.device_count; i++) {
+                reg_pkt.devices[i] = g_devices[i];
+            }
         } else {
-            usb_device_init(&reg_pkt.device);
+            usb_device_init(&reg_pkt.devices[0]);
         }
 
         net_send_all(g_client_sock, &hdr, sizeof(hdr));

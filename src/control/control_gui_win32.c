@@ -182,38 +182,43 @@ static void update_tree_view(void) {
         tvis.item.pszText = customerLabel;
         HTREEITEM hCustomer = TreeView_InsertItem(g_hwndTree, &tvis);
 
-        char devLabel[512];
-        const char *cat = (g_remote_devices[i].device.device_category[0] != '\0') ?
-                           g_remote_devices[i].device.device_category : "[Dispositivo USB]";
-        snprintf(devLabel, sizeof(devLabel), "%s  %s  (Serial: %s)",
-                 cat, g_remote_devices[i].device.product_name, g_remote_devices[i].device.serial_number);
+        int d_count = (g_remote_devices[i].device_count > 0) ? g_remote_devices[i].device_count : 1;
+        for (int d = 0; d < d_count; d++) {
+            usb_device_info_t *curr_dev = &g_remote_devices[i].devices[d];
 
-        memset(&tvis, 0, sizeof(tvis));
-        tvis.hParent = hCustomer;
-        tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-        tvis.item.iImage = 1;
-        tvis.item.iSelectedImage = 1;
-        tvis.item.pszText = devLabel;
-        HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
+            char devLabel[512];
+            const char *cat = (curr_dev->device_category[0] != '\0') ?
+                               curr_dev->device_category : "[Dispositivo USB]";
+            snprintf(devLabel, sizeof(devLabel), "%s  %s  (Serial: %s)",
+                     cat, curr_dev->product_name, curr_dev->serial_number);
 
-        char propLabel[512];
-        snprintf(propLabel, sizeof(propLabel), "Status: %s  (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
-                 usb_status_to_string(g_remote_devices[i].device.status),
-                 g_remote_devices[i].device.vendor_id, g_remote_devices[i].device.product_id,
-                 g_remote_devices[i].device.bus_number, g_remote_devices[i].device.device_address);
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hCustomer;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+            tvis.item.iImage = 1;
+            tvis.item.iSelectedImage = 1;
+            tvis.item.pszText = devLabel;
+            HTREEITEM hDevice = TreeView_InsertItem(g_hwndTree, &tvis);
 
-        memset(&tvis, 0, sizeof(tvis));
-        tvis.hParent = hDevice;
-        tvis.hInsertAfter = TVI_LAST;
-        tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
-        tvis.item.iImage = 2;
-        tvis.item.iSelectedImage = 2;
-        tvis.item.pszText = propLabel;
-        TreeView_InsertItem(g_hwndTree, &tvis);
+            char propLabel[512];
+            snprintf(propLabel, sizeof(propLabel), "Status: %s  (VID: 0x%04X, PID: 0x%04X, Bus: %d, Addr: %d)",
+                     usb_status_to_string(curr_dev->status),
+                     curr_dev->vendor_id, curr_dev->product_id,
+                     curr_dev->bus_number, curr_dev->device_address);
 
+            memset(&tvis, 0, sizeof(tvis));
+            tvis.hParent = hDevice;
+            tvis.hInsertAfter = TVI_LAST;
+            tvis.item.mask = TVIF_TEXT | TVIF_IMAGE | TVIF_SELECTEDIMAGE;
+            tvis.item.iImage = 2;
+            tvis.item.iSelectedImage = 2;
+            tvis.item.pszText = propLabel;
+            TreeView_InsertItem(g_hwndTree, &tvis);
+
+            TreeView_Expand(g_hwndTree, hDevice, TVE_EXPAND);
+        }
         TreeView_Expand(g_hwndTree, hCustomer, TVE_EXPAND);
-        TreeView_Expand(g_hwndTree, hDevice, TVE_EXPAND);
     }
 }
 
@@ -309,8 +314,11 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 net_send_all(g_tech_sock, &hdr, sizeof(hdr));
             }
             for (int i = 0; i < g_remote_count; i++) {
-                g_remote_devices[i].device.status = USB_STATUS_SERVICING;
-                usb_device_attach_virtual(&g_remote_devices[i].device);
+                int d_cnt = (g_remote_devices[i].device_count > 0) ? g_remote_devices[i].device_count : 1;
+                for (int d = 0; d < d_cnt; d++) {
+                    g_remote_devices[i].devices[d].status = USB_STATUS_SERVICING;
+                    usb_device_attach_virtual(&g_remote_devices[i].devices[d]);
+                }
             }
             update_tree_view();
         } else if (LOWORD(wParam) == IDM_DISCONNECT_DEVICE) {
@@ -320,7 +328,10 @@ LRESULT CALLBACK ControlPanelProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lP
                 net_send_all(g_tech_sock, &hdr, sizeof(hdr));
             }
             for (int i = 0; i < g_remote_count; i++) {
-                g_remote_devices[i].device.status = USB_STATUS_DISCONNECTED;
+                int d_cnt = (g_remote_devices[i].device_count > 0) ? g_remote_devices[i].device_count : 1;
+                for (int d = 0; d < d_cnt; d++) {
+                    g_remote_devices[i].devices[d].status = USB_STATUS_DISCONNECTED;
+                }
             }
             update_tree_view();
         } else if (LOWORD(wParam) == IDM_REFRESH_LIST) {

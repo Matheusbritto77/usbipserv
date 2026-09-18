@@ -28,7 +28,8 @@ typedef struct {
     socket_t client_sock;
     char client_ip[64];
     char target_tech_id[32];
-    usb_device_info_t device;
+    int device_count;
+    usb_device_info_t devices[8];
     bool is_active;
 } client_session_t;
 
@@ -93,13 +94,14 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
             g_clients[session_idx].client_sock = conn_sock;
             strncpy(g_clients[session_idx].client_ip, conn_ip, sizeof(g_clients[session_idx].client_ip));
             strncpy(g_clients[session_idx].target_tech_id, reg_pkt.target_tech_id, sizeof(g_clients[session_idx].target_tech_id));
-            g_clients[session_idx].device = reg_pkt.device;
+            g_clients[session_idx].device_count = (reg_pkt.device_count > 0) ? reg_pkt.device_count : 1;
+            for (int d = 0; d < g_clients[session_idx].device_count; d++) {
+                g_clients[session_idx].devices[d] = reg_pkt.devices[d];
+            }
             g_clients[session_idx].is_active = true;
 
-            printf("[Server] Registered Customer Client at %s -> Target Numeric Tech ID: [%s]\n",
-                   conn_ip, reg_pkt.target_tech_id);
-            printf("[Server] USB Device: %s (s/n: %s)\n",
-                   reg_pkt.device.product_name, reg_pkt.device.serial_number);
+            printf("[Server] Registered Customer Client at %s -> Target Numeric Tech ID: [%s] (%d Devices)\n",
+                   conn_ip, reg_pkt.target_tech_id, g_clients[session_idx].device_count);
 
             for (int t = 0; t < MAX_SESSIONS; t++) {
                 if (g_techs[t].is_active && strcasecmp(g_techs[t].tech_id, reg_pkt.target_tech_id) == 0) {
@@ -107,7 +109,7 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
                     usbredir_header_init(&resp_hdr, USBREDIR_CMD_LIST_DEVICES, sizeof(usbredir_packet_register_t));
                     net_send_all(g_techs[t].tech_sock, &resp_hdr, sizeof(resp_hdr));
                     net_send_all(g_techs[t].tech_sock, &reg_pkt, sizeof(reg_pkt));
-                    printf("[Server] Routed USB device to Numeric Technician ID %s\n", g_techs[t].tech_id);
+                    printf("[Server] Routed %d USB devices to Numeric Technician ID %s\n", g_clients[session_idx].device_count, g_techs[t].tech_id);
                 }
             }
         }
@@ -143,9 +145,13 @@ static THREAD_ROUTINE handle_client_connection(void *arg) {
                     usbredir_header_t list_hdr;
                     usbredir_header_init(&list_hdr, USBREDIR_CMD_LIST_DEVICES, sizeof(usbredir_packet_register_t));
                     usbredir_packet_register_t reg_pkt;
+                    memset(&reg_pkt, 0, sizeof(reg_pkt));
                     strncpy(reg_pkt.client_ip, g_clients[c].client_ip, sizeof(reg_pkt.client_ip));
                     strncpy(reg_pkt.target_tech_id, g_clients[c].target_tech_id, sizeof(reg_pkt.target_tech_id));
-                    reg_pkt.device = g_clients[c].device;
+                    reg_pkt.device_count = g_clients[c].device_count;
+                    for (int d = 0; d < g_clients[c].device_count; d++) {
+                        reg_pkt.devices[d] = g_clients[c].devices[d];
+                    }
 
                     net_send_all(conn_sock, &list_hdr, sizeof(list_hdr));
                     net_send_all(conn_sock, &reg_pkt, sizeof(reg_pkt));

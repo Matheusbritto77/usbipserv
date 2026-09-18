@@ -27,7 +27,8 @@ typedef struct {
 typedef struct {
     char client_ip[64];
     char target_tech_id[32];
-    usb_device_info_t device;
+    int device_count;
+    usb_device_info_t devices[8];
 } usbredir_packet_register_t;
 
 typedef struct {
